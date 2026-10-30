@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
+from cairn.server import activity as activity_store
 from cairn.server.db import get_conn
 from cairn.server.models import (
     CompleteRequest,
@@ -8,8 +9,12 @@ from cairn.server.models import (
     Hint,
     HeartbeatRequest,
     Intent,
+    ProjectActivityCreate,
+    ProjectActivityFeed,
+    ProjectActivityItem,
     ProjectDetail,
     ProjectMeta,
+    ProjectOverview,
     ProjectSummary,
     ReopenRequest,
     ReopenResponse,
@@ -103,6 +108,18 @@ def create_project(body: CreateProjectRequest):
                 )
                 hints.append(Hint(id=hid, content=h.content, creator=h.creator, created_at=now))
 
+        activity_store.record_activity(
+            conn,
+            pid,
+            kind="project",
+            title="Project created",
+            description=body.title,
+            actor="human",
+            status="active",
+            metadata={"bootstrap_enabled": body.bootstrap_enabled},
+            created_at=now,
+        )
+
         return ProjectDetail(
             project=ProjectMeta(
                 id=pid,
@@ -144,8 +161,89 @@ def get_project(project_id: str):
         )
 
 
+@router.get("/projects/{project_id}/activity", response_model=ProjectActivityFeed)
+def project_activity(
+    project_id: str,
+    after: str | None = Query(default=None, description="Cursor from a previous next_cursor"),
+    limit: int = Query(default=50, ge=1, le=500),
+    kinds: str | None = Query(default=None, description="Comma-separated feed kinds"),
+):
+    """Unified chronological feed: facts, intents, hints, worker/steering/approval events, chat."""
+    with get_conn() as conn:
+        get_project_or_404(conn, project_id)
+        kind_list = [item.strip() for item in kinds.split(",") if item.strip()] if kinds else None
+        payload = activity_store.build_project_activity(
+            conn, project_id, after=after, limit=limit, kinds=kind_list
+        )
+        return ProjectActivityFeed(**payload)
+
+
+@router.get("/projects/{project_id}/overview", response_model=ProjectOverview)
+def project_overview(project_id: str):
+    """Project summary + real counts + recent activity (no synthesized fields)."""
+    with get_conn() as conn:
+        expire_workers(conn, project_id)
+        expire_reason_leases(conn, project_id)
+        row = get_project_or_404(conn, project_id)
+        payload = activity_store.project_overview(conn, project_id)
+        return ProjectOverview(
+            project=project_meta_from_row(row),
+            project_id=project_id,
+            generated_at=payload["generated_at"],
+            counts=payload["counts"],
+            workers=payload["workers"],
+            recent_activity=payload["recent_activity"],
+            recent_activity_order=payload.get("recent_activity_order", "newest_first"),
+        )
+
+
+@router.post("/projects/{project_id}/activity", response_model=ProjectActivityItem, status_code=201)
+def append_project_activity(project_id: str, body: ProjectActivityCreate):
+    """Activity writer for dispatcher/worker events (best-effort on the dispatcher side)."""
+    with get_conn() as conn:
+        get_project_or_404(conn, project_id)
+        activity_id = activity_store.record_activity(
+            conn,
+            project_id,
+            kind=body.kind,
+            title=body.title,
+            description=body.description,
+            actor=body.actor,
+            status=body.status,
+            metadata=body.metadata,
+            source=body.source,
+            run_id=body.run_id,
+        )
+        row = conn.execute(
+            "SELECT * FROM project_activity WHERE id = ?", (activity_id,)
+        ).fetchone()
+        metadata = body.metadata
+        return ProjectActivityItem(
+            kind=row["kind"],
+            id=f"event:{row['id']}",
+            project_id=project_id,
+            timestamp=row["created_at"],
+            timestamp_source="project_activity.created_at",
+            actor=row["actor"],
+            status=row["status"],
+            title=row["title"],
+            description=row["description"],
+            metadata=metadata,
+            source=row["source"],
+            cursor=f"{row['created_at']}#event:{row['id']}",
+            run_id=row["run_id"],
+        )
+
+
 @router.delete("/projects/{project_id}", status_code=204)
-def delete_project(project_id: str):
+async def delete_project(project_id: str):
+    from cairn.server import pi_rpc
+
+    with get_conn() as conn:
+        get_project_or_404(conn, project_id)
+    # Warm chat sessions hold a live pi process for this project; close them before the
+    # conversations (and their rows) disappear, or the process would be orphaned.
+    await pi_rpc.manager().close_for_project(project_id)
     with get_conn() as conn:
         get_project_or_404(conn, project_id)
         conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
@@ -184,6 +282,15 @@ def update_project_status(project_id: str, body: UpdateProjectStatusRequest):
                 (project_id,),
             )
             clear_project_reason(conn, project_id)
+        activity_store.record_activity(
+            conn,
+            project_id,
+            kind="status",
+            title=f"Project status changed to {body.status}",
+            actor=body.actor,
+            status=body.status,
+            metadata={"from": current_status, "to": body.status},
+        )
         updated = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
         return project_meta_from_row(updated)
 

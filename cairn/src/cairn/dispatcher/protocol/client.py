@@ -48,6 +48,18 @@ class CairnClient:
         for session in sessions:
             session.close()
 
+    def close_thread_session(self) -> None:
+        """Close this thread's pooled session (short-lived recorder/writer threads)."""
+        session = getattr(self._local, "session", None)
+        if session is None:
+            return
+        with self._sessions_lock:
+            self._sessions.pop(threading.get_ident(), None)
+        try:
+            session.close()
+        finally:
+            self._local.session = None
+
     def list_projects(self) -> list[ProjectSummary]:
         response = self._session().get(self._url("/projects"), timeout=self._timeout)
         response.raise_for_status()
@@ -126,6 +138,103 @@ class CairnClient:
             "POST",
             f"/projects/{project_id}/intents",
             json={"from": from_ids, "description": description, "creator": creator, "worker": None},
+        )
+
+    def pending_steering(
+        self, project_id: str, intent_id: str | None = None, *, project_only: bool = False
+    ) -> list[dict[str, Any]]:
+        params: dict[str, Any] = {"pending": "1"}
+        if project_only:
+            params["project_only"] = "1"
+        if intent_id is not None:
+            params["intent_id"] = intent_id
+        try:
+            response = self._session().get(
+                self._url(f"/projects/{project_id}/steering"), params=params, timeout=self._timeout
+            )
+        except requests.RequestException as exc:
+            LOG.warning("pending steering request failed project=%s error=%s", project_id, exc)
+            return []
+        if not response.ok:
+            LOG.warning(
+                "pending steering request failed project=%s status=%s", project_id, response.status_code
+            )
+            return []
+        try:
+            return list(response.json().get("items") or [])
+        except ValueError:
+            LOG.warning("pending steering response was not JSON project=%s", project_id)
+            return []
+
+    def deliver_steering(
+        self, project_id: str, steering_id: int, worker: str, run: str | None = None
+    ) -> ApiResult:
+        return self._request_json(
+            "POST",
+            f"/projects/{project_id}/steering/{steering_id}/delivered",
+            json={"worker": worker, "run": run},
+        )
+
+    def record_activity(
+        self,
+        project_id: str,
+        *,
+        kind: str,
+        title: str,
+        description: str | None = None,
+        actor: str | None = None,
+        status: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        run_id: str | None = None,
+    ) -> ApiResult:
+        return self._request_json(
+            "POST",
+            f"/projects/{project_id}/activity",
+            json={
+                "kind": kind,
+                "title": title,
+                "description": description,
+                "actor": actor,
+                "status": status,
+                "metadata": metadata or {},
+                "run_id": run_id,
+            },
+        )
+
+    def update_worker_activity(
+        self,
+        project_id: str,
+        activity_id: int,
+        *,
+        status: str | None = None,
+        description: str | None = None,
+        error: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> ApiResult:
+        return self._request_json(
+            "PATCH",
+            f"/projects/{project_id}/workers/activity/{activity_id}",
+            json={
+                "status": status,
+                "description": description,
+                "error": error,
+                "metadata": metadata,
+            },
+        )
+
+    def close_worker_run(
+        self,
+        project_id: str,
+        run_id: str,
+        *,
+        status: str,
+        error: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> ApiResult:
+        return self._request_json(
+            "POST",
+            f"/projects/{project_id}/workers/runs/{run_id}/close",
+            json={"status": status, "error": error, "metadata": metadata or {}},
         )
 
     def _request_json(self, method: str, path: str, json: dict[str, Any]) -> ApiResult:

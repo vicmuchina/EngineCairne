@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from cairn.server import activity as activity_store
 from cairn.server.db import get_conn
 from cairn.server.models import (
     ConcludeRequest,
@@ -41,7 +42,7 @@ def create_intent(project_id: str, body: CreateIntentRequest):
         iid = next_intent_id(conn, project_id)
         claimed = body.worker is not None
         conn.execute(
-            "INSERT INTO intents (id, project_id, to_fact_id, description, creator, worker, last_heartbeat_at, created_at, concluded_at) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, NULL)",
+            "INSERT INTO intents (id, project_id, to_fact_id, description, creator, worker, last_heartbeat_at, created_at, concluded_at, priority) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, NULL, ?)",
             (
                 iid,
                 project_id,
@@ -50,6 +51,7 @@ def create_intent(project_id: str, body: CreateIntentRequest):
                 body.worker,
                 now if claimed else None,
                 now,
+                body.priority,
             ),
         )
         for fid in body.from_:
@@ -68,6 +70,7 @@ def create_intent(project_id: str, body: CreateIntentRequest):
             last_heartbeat_at=now if claimed else None,
             created_at=now,
             concluded_at=None,
+            priority=body.priority,
         )
 
 
@@ -78,13 +81,26 @@ def create_intent(project_id: str, body: CreateIntentRequest):
 def heartbeat(project_id: str, intent_id: str, body: HeartbeatRequest):
     with get_conn() as conn:
         check_project_active(conn, project_id)
-        get_claimable_open_intent_or_404(conn, project_id, intent_id, body.worker)
+        before = get_claimable_open_intent_or_404(conn, project_id, intent_id, body.worker)
 
         now = utcnow()
         conn.execute(
             "UPDATE intents SET worker = ?, last_heartbeat_at = ? WHERE id = ? AND project_id = ?",
             (body.worker, now, intent_id, project_id),
         )
+        if before["worker"] is None:
+            activity_store.record_activity(
+                conn,
+                project_id,
+                kind="intent",
+                title=f"Intent {intent_id} claimed by {body.worker}",
+                description=before["description"],
+                actor=body.worker,
+                status="working",
+                metadata={"intent_id": intent_id},
+                source="server",
+                created_at=now,
+            )
 
         updated = conn.execute(
             "SELECT * FROM intents WHERE id = ? AND project_id = ?",
@@ -106,6 +122,17 @@ def release(project_id: str, intent_id: str, body: HeartbeatRequest):
             conn.execute(
                 "UPDATE intents SET worker = NULL WHERE id = ? AND project_id = ?",
                 (intent_id, project_id),
+            )
+            activity_store.record_activity(
+                conn,
+                project_id,
+                kind="intent",
+                title=f"Intent {intent_id} released by {body.worker}",
+                description=row["description"],
+                actor=body.worker,
+                status="open",
+                metadata={"intent_id": intent_id},
+                created_at=utcnow(),
             )
             row = conn.execute(
                 "SELECT * FROM intents WHERE id = ? AND project_id = ?",

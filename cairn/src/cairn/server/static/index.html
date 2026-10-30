@@ -4,6 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cairn</title>
+<script>
+  (() => {
+    try {
+      const t = localStorage.getItem('cairn-theme') ||
+        (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.dataset.theme = t;
+      document.documentElement.classList.toggle('dark', t === 'dark');
+    } catch (e) {}
+  })();
+</script>
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <script src="/static/vendor/tailwindcss.js"></script>
 <script src="/static/vendor/dagre.min.js"></script>
@@ -212,6 +222,389 @@
     0%, 100% { opacity: 0.72; }
     50% { opacity: 1; }
   }
+
+  /* ── Cairn shell tokens — Artex near-black / zinc ───────────────── */
+  :root {
+    --cx-canvas: #FAFAFA;
+    --cx-panel: #FFFFFF;
+    --cx-panel-2: #F5F5F5;
+    --cx-border: #E5E5E5;
+    --cx-border-strong: #D4D4D4;
+    --cx-row-border: #EEEEEE;
+    --cx-text: #0A0A0A;
+    --cx-text-2: #3F3F46;
+    --cx-muted: #525252;
+    --cx-subtle: #737373;
+    --cx-hover: #F5F5F5;
+    --cx-active: #EDEDED;
+    --cx-topbar-border: #E5E5E5;
+    --cx-badge: #F5F5F5;
+    --cx-avatar: #E5E5E5;
+    --cx-accent: #7C3AED;
+    --cx-seg-active: #FFFFFF;
+  }
+  html[data-theme="dark"] {
+    color-scheme: dark;
+    --cx-canvas: #0A0A0A;
+    --cx-panel: #171717;
+    --cx-panel-2: #1F1F1F;
+    --cx-border: #212121;
+    --cx-border-strong: #2A2A2A;
+    --cx-row-border: #252525;
+    --cx-text: #FAFAFA;
+    --cx-text-2: #D4D4D4;
+    --cx-muted: #A1A1A1;
+    --cx-subtle: #B5B5B5;
+    --cx-hover: #1F1F1F;
+    --cx-active: #262626;
+    --cx-topbar-border: #1A1A1A;
+    --cx-badge: #262626;
+    --cx-avatar: #262626;
+    --cx-accent: #8B5CF6;
+    --cx-seg-active: #262626;
+    /* legacy aliases */
+    --cairn-bg: #0A0A0A;
+    --cairn-surface: #171717;
+    --cairn-surface-2: #1F1F1F;
+    --cairn-border: #212121;
+    --cairn-text: #FAFAFA;
+    --cairn-muted: #A1A1A1;
+    --cairn-muted-2: #737373;
+  }
+  html[data-theme="light"] { color-scheme: light; }
+  html[data-theme="light"] body { background-color: var(--cx-canvas) !important; color: var(--cx-text) !important; }
+  html[data-theme="dark"] body { background-color: var(--cx-canvas) !important; color: var(--cx-text) !important; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif; -webkit-font-smoothing: antialiased; }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #D4D4D4; border-radius: 3px; }
+  html[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #333333; }
+
+  /* ── Shell: floating sidebar + topbar ───────────────────────────── */
+  .cx-shell { display: flex; height: 100vh; overflow: hidden; background: var(--cx-canvas); color: var(--cx-text); }
+  .cx-sidebar {
+    position: fixed; top: 8px; bottom: 8px; left: 8px; width: 256px; z-index: 40;
+    display: flex; flex-direction: column; overflow: hidden;
+    background: var(--cx-panel); border: 1px solid var(--cx-border); border-radius: 12px;
+    transition: width .18s cubic-bezier(.4,0,.2,1);
+  }
+  .cx-shell[data-collapsed="true"] .cx-sidebar { width: 64px; }
+  .cx-main {
+    flex: 1 1 auto; min-width: 0; height: 100vh; margin-left: 264px;
+    display: flex; flex-direction: column;
+    transition: margin-left .18s cubic-bezier(.4,0,.2,1);
+  }
+  .cx-shell[data-collapsed="true"] .cx-main { margin-left: 72px; }
+
+  .cx-sidebar-head { flex: 0 0 56px; height: 56px; display: flex; align-items: center; gap: 10px; padding: 0 16px; }
+  .cx-shell[data-collapsed="true"] .cx-sidebar-head { padding: 0; justify-content: center; }
+  .cx-logo { width: 24px; height: 24px; flex: 0 0 24px; display: flex; align-items: center; justify-content: center; color: var(--cx-accent); }
+  .cx-brand { font-size: 14px; line-height: 20px; font-weight: 700; letter-spacing: .08em; color: var(--cx-text); white-space: nowrap; }
+
+  .cx-nav { flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; padding: 2px 0 8px; }
+  .cx-nav-group {
+    padding: 14px 16px 6px; font-size: 11px; line-height: 16px; font-weight: 500;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--cx-subtle); white-space: nowrap;
+  }
+  .cx-shell[data-collapsed="true"] .cx-nav-group { padding: 12px 0 4px; text-align: center; font-size: 0; height: 18px; }
+  .cx-nav-item {
+    display: flex; align-items: center; gap: 10px; width: calc(100% - 16px); height: 32px;
+    margin: 2px 8px; padding: 0 10px; border-radius: 8px; text-align: left;
+    font-size: 14px; line-height: 20px; font-weight: 500; color: var(--cx-text-2);
+    white-space: nowrap; transition: background-color .12s ease, color .12s ease;
+  }
+  .cx-nav-item:hover { background: var(--cx-hover); color: var(--cx-text); }
+  .cx-nav-item[data-active="true"] { background: var(--cx-active); color: var(--cx-text); }
+  .cx-nav-item svg { width: 16px; height: 16px; flex: 0 0 16px; color: var(--cx-muted); }
+  .cx-nav-item:hover svg, .cx-nav-item[data-active="true"] svg { color: var(--cx-text); }
+  .cx-shell[data-collapsed="true"] .cx-nav-item { width: 48px; justify-content: center; padding: 0; }
+  .cx-nav-tip { position: fixed; left: 80px; transform: translateY(-50%); z-index: 80; padding: 6px 9px; border-radius: 6px; background: var(--cx-text); color: var(--cx-canvas); font-size: 12px; line-height: 16px; font-weight: 500; white-space: nowrap; pointer-events: none; box-shadow: 0 8px 24px rgba(0,0,0,.35); }
+  .cx-shell[data-collapsed="true"] .cx-nav-label { display: none; }
+
+  .cx-sidebar-foot { flex: 0 0 56px; height: 56px; display: flex; align-items: center; gap: 10px; padding: 0 12px; }
+  .cx-shell[data-collapsed="true"] .cx-sidebar-foot { justify-content: center; padding: 0; }
+  .cx-avatar {
+    width: 32px; height: 32px; flex: 0 0 32px; border-radius: 8px; background: var(--cx-avatar);
+    color: var(--cx-text); font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center;
+  }
+  .cx-avatar-sm { width: 28px; height: 28px; flex: 0 0 28px; border-radius: 999px; background: var(--cx-avatar); color: var(--cx-text); font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+  .cx-actor { font-size: 12px; line-height: 16px; font-weight: 600; color: var(--cx-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cx-actor-sub { font-size: 11px; line-height: 14px; color: var(--cx-muted); white-space: nowrap; }
+
+  .cx-topbar {
+    flex: 0 0 56px; height: 56px; display: flex; align-items: center; gap: 12px;
+    padding: 0 24px 0 32px; border-bottom: 1px solid var(--cx-topbar-border); background: var(--cx-canvas);
+  }
+  .cx-icon-btn {
+    width: 28px; height: 28px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center;
+    color: var(--cx-muted); transition: background-color .12s ease, color .12s ease; flex: 0 0 28px;
+  }
+  .cx-icon-btn:hover { background: var(--cx-hover); color: var(--cx-text); }
+  .cx-divider { width: 1px; height: 20px; background: var(--cx-border); flex: 0 0 1px; }
+  .cx-search-trigger {
+    height: 28px; width: 128px; flex: 0 0 128px; display: flex; align-items: center; gap: 6px; padding: 0 8px;
+    border: 1px solid var(--cx-border-strong); border-radius: 8px; background: transparent;
+    font-size: 13px; line-height: 1; color: var(--cx-muted); transition: border-color .12s ease, color .12s ease;
+  }
+  .cx-search-trigger:hover { border-color: #3F3F46; color: var(--cx-text-2); }
+  html[data-theme="dark"] .cx-search-trigger { border-color: #262626; }
+  html[data-theme="light"] .cx-search-trigger:hover { border-color: #A3A3A3; }
+  .cx-kbd {
+    margin-left: auto; font-size: 10px; line-height: 14px; padding: 0 4px; border-radius: 4px;
+    border: 1px solid var(--cx-border-strong); color: var(--cx-muted); background: var(--cx-panel-2);
+  }
+  .cx-crumbs { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; line-height: 18px; color: var(--cx-muted); }
+  .cx-crumb { color: var(--cx-muted); transition: color .12s ease; white-space: nowrap; }
+  .cx-crumb:hover { color: var(--cx-text); }
+  .cx-crumb-sep { color: var(--cx-border-strong); }
+  .cx-crumb-current { color: var(--cx-text-2); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 280px; }
+  .cx-version { font-size: 12px; line-height: 16px; color: var(--cx-muted); white-space: nowrap; }
+
+  .cx-content { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  .cx-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  .cx-page { width: 100%; max-width: 1600px; margin: 0 auto; padding: 24px 32px 48px; }
+  .cx-page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+  .cx-page-title { font-size: 18px; line-height: 28px; font-weight: 600; letter-spacing: -.01em; color: var(--cx-text); }
+  .cx-page-sub { margin-top: 4px; font-size: 14px; line-height: 20px; color: var(--cx-muted); }
+
+  .cx-card { background: var(--cx-panel); border: 1px solid var(--cx-border); border-radius: 12px; overflow: hidden; }
+  .cx-card-head { min-height: 46px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--cx-border); }
+  .cx-card-title { display: flex; align-items: center; gap: 8px; font-size: 14px; line-height: 20px; font-weight: 600; color: var(--cx-text); }
+  .cx-meta { font-size: 12px; line-height: 16px; color: var(--cx-muted); }
+  .cx-link { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; line-height: 16px; color: var(--cx-muted); transition: color .12s ease; }
+  .cx-link:hover { color: var(--cx-text); }
+
+  .cx-kpi { min-height: 116px; display: flex; flex-direction: column; padding: 16px; background: var(--cx-panel); border: 1px solid var(--cx-border); border-radius: 12px; }
+  .cx-kpi-label { display: flex; align-items: center; gap: 6px; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--cx-muted); }
+  .cx-kpi-label svg { width: 14px; height: 14px; color: var(--cx-muted); }
+  .cx-kpi-value { margin-top: 12px; font-size: 24px; line-height: 30px; font-weight: 600; letter-spacing: -.01em; color: var(--cx-text); font-variant-numeric: tabular-nums; }
+  .cx-kpi-sub { margin-top: auto; padding-top: 10px; font-size: 12px; line-height: 16px; color: var(--cx-muted); }
+  .cx-kpi-sub .cx-amber { color: #D97706; }
+  html[data-theme="dark"] .cx-kpi-sub .cx-amber { color: #FBBF24; }
+  .cx-kpi-sub .cx-teal { color: #0D9488; }
+  html[data-theme="dark"] .cx-kpi-sub .cx-teal { color: #2DD4BF; }
+
+  .cx-pill { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 7px; border-radius: 6px; font-size: 11px; line-height: 1; font-weight: 500; white-space: nowrap; text-transform: capitalize; }
+  .cx-pill .cx-dot { width: 5px; height: 5px; border-radius: 999px; background: currentColor; flex: 0 0 5px; }
+  .cx-pill--active { background: rgba(34,197,94,.12); color: #4ADE80; }
+  .cx-pill--amber { background: rgba(245,158,11,.14); color: #FBBF24; }
+  .cx-pill--rose { background: rgba(244,63,94,.13); color: #FB7185; }
+  .cx-pill--info { background: rgba(56,189,248,.12); color: #7DD3FC; }
+  .cx-pill--violet { background: rgba(139,92,246,.14); color: #C4B5FD; }
+  .cx-pill--neutral { background: var(--cx-badge); color: var(--cx-muted); }
+  html[data-theme="light"] .cx-pill--active { background: #F0FDF4; color: #15803D; }
+  html[data-theme="light"] .cx-pill--amber { background: #FFFBEB; color: #B45309; }
+  html[data-theme="light"] .cx-pill--rose { background: #FFF1F2; color: #BE123C; }
+  html[data-theme="light"] .cx-pill--info { background: #F0F9FF; color: #0369A1; }
+  html[data-theme="light"] .cx-pill--violet { background: #F5F3FF; color: #6D28D9; }
+
+  .cx-btn {
+    height: 32px; padding: 0 12px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    border: 1px solid var(--cx-border-strong); border-radius: 8px; background: var(--cx-panel); color: var(--cx-text-2);
+    font-size: 13px; line-height: 1; font-weight: 500; white-space: nowrap;
+    transition: background-color .12s ease, color .12s ease, border-color .12s ease, opacity .12s ease;
+  }
+  .cx-btn:hover { background: var(--cx-hover); color: var(--cx-text); }
+  .cx-btn:disabled { opacity: .4; cursor: not-allowed; }
+  .cx-btn svg { width: 14px; height: 14px; }
+  .cx-btn--primary { background: var(--cx-text); border-color: var(--cx-text); color: var(--cx-canvas); }
+  .cx-btn--primary:hover { background: var(--cx-text); color: var(--cx-canvas); opacity: .88; }
+  .cx-btn--ghost { border-color: transparent; background: transparent; }
+  .cx-btn--ghost:hover { background: var(--cx-hover); }
+  .cx-btn--sm { height: 28px; padding: 0 10px; font-size: 12px; }
+  .cx-btn--danger { border-color: rgba(244,63,94,.28); color: #FB7185; }
+  .cx-btn--danger:hover { background: rgba(244,63,94,.12); color: #FDA4AF; border-color: rgba(244,63,94,.4); }
+  .cx-btn--amber { border-color: rgba(245,158,11,.3); color: #FBBF24; }
+  .cx-btn--amber:hover { background: rgba(245,158,11,.12); color: #FCD34D; }
+  html[data-theme="light"] .cx-btn--danger { color: #E11D48; }
+  html[data-theme="light"] .cx-btn--amber { color: #B45309; }
+  .cx-dialog { background: var(--cx-panel); border: 1px solid var(--cx-border); border-radius: 12px; box-shadow: 0 24px 70px rgba(0,0,0,.35); }
+  html[data-theme="dark"] .cx-dialog { box-shadow: 0 24px 80px rgba(0,0,0,.7); }
+  .cx-dialog input:not([type="checkbox"]), .cx-dialog textarea, .cx-dialog select { border-radius: 8px; }
+  .cx-dialog input[type="checkbox"] { accent-color: var(--cx-text); }
+  .cx-btn--danger-solid { background: #E11D48; border-color: #E11D48; color: #FFFFFF; }
+  .cx-btn--danger-solid:hover { background: #BE123C; border-color: #BE123C; color: #FFFFFF; }
+  .cx-icon-action { width: 28px; height: 28px; flex: 0 0 28px; border: 1px solid var(--cx-border); border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; color: var(--cx-muted); background: transparent; transition: background-color .12s ease, color .12s ease, border-color .12s ease; }
+  .cx-icon-action:hover { background: var(--cx-hover); color: var(--cx-text); border-color: var(--cx-border-strong); }
+  .cx-icon-action--danger:hover { background: rgba(244,63,94,.12); color: #FB7185; border-color: rgba(244,63,94,.35); }
+  .cx-icon-action--amber:hover { background: rgba(245,158,11,.12); color: #FBBF24; border-color: rgba(245,158,11,.35); }
+  .cx-icon-action svg { width: 14px; height: 14px; }
+  .cx-seg { display: inline-flex; align-items: center; padding: 2px; border: 1px solid var(--cx-border); border-radius: 8px; background: var(--cx-panel-2); }
+  .cx-seg button { height: 26px; padding: 0 10px; border-radius: 6px; font-size: 12px; line-height: 1; font-weight: 500; color: var(--cx-muted); transition: background-color .12s ease, color .12s ease; }
+  .cx-seg button:hover { color: var(--cx-text); }
+  .cx-seg button[data-active="true"] { background: var(--cx-seg-active); color: var(--cx-text); box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+
+  .cx-table { width: 100%; border-collapse: collapse; }
+  .cx-table th { height: 30px; padding: 0 16px; text-align: left; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--cx-muted); border-bottom: 1px solid var(--cx-border); white-space: nowrap; }
+  .cx-table td { height: 48px; padding: 0 16px; font-size: 14px; line-height: 20px; color: var(--cx-text-2); border-bottom: 1px solid var(--cx-row-border); white-space: nowrap; }
+  .cx-table tbody tr:last-child td { border-bottom: 0; }
+  .cx-row { cursor: pointer; transition: background-color .12s ease; }
+  .cx-row:hover td { background: var(--cx-hover); }
+  .cx-row-title { font-size: 14px; line-height: 20px; font-weight: 500; color: var(--cx-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 320px; }
+  .cx-row-sub { font-size: 11px; line-height: 14px; color: var(--cx-muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .cx-num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  .cx-feed-item { display: block; width: 100%; text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--cx-row-border); transition: background-color .12s ease; }
+  .cx-feed-item:last-child { border-bottom: 0; }
+  .cx-feed-item:hover { background: var(--cx-hover); }
+  .cx-feed-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .cx-feed-text { margin-top: 6px; font-size: 13px; line-height: 19px; color: var(--cx-text-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .cx-feed-meta { margin-top: 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 11px; line-height: 15px; color: var(--cx-muted); }
+  .cx-code { display: inline-flex; align-items: center; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; line-height: 16px; font-weight: 600; padding: 0 5px; border-radius: 4px; background: var(--cx-badge); color: var(--cx-muted); }
+  .cx-code--violet { background: rgba(139,92,246,.14); color: #C4B5FD; }
+  .cx-code--teal { background: rgba(20,184,166,.14); color: #5EEAD4; }
+  .cx-code--rose { background: rgba(244,63,94,.13); color: #FDA4AF; }
+  html[data-theme="light"] .cx-code--violet { background: #F5F3FF; color: #6D28D9; }
+  html[data-theme="light"] .cx-code--teal { background: #F0FDFA; color: #0F766E; }
+  html[data-theme="light"] .cx-code--rose { background: #FFF1F2; color: #BE123C; }
+
+  .cx-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 36px 16px; text-align: center; }
+  .cx-empty svg { width: 22px; height: 22px; color: var(--cx-border-strong); margin-bottom: 2px; }
+  .cx-empty-title { font-size: 13px; line-height: 18px; font-weight: 500; color: var(--cx-text-2); }
+  .cx-empty-sub { font-size: 12px; line-height: 16px; color: var(--cx-muted); max-width: 280px; }
+  .cx-skeleton { background: linear-gradient(90deg, var(--cx-hover) 25%, var(--cx-panel-2) 37%, var(--cx-hover) 63%); background-size: 400% 100%; animation: cxShimmer 1.4s ease infinite; border-radius: 5px; }
+  @keyframes cxShimmer { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+
+  .cx-input {
+    height: 32px; border: 1px solid var(--cx-border-strong); border-radius: 8px; background: var(--cx-panel);
+    color: var(--cx-text); font-size: 13px; line-height: 20px; padding: 0 12px;
+  }
+  .cx-input:focus { outline: none; border-color: #52525B; box-shadow: 0 0 0 3px rgba(255,255,255,.05); }
+  html[data-theme="light"] .cx-input:focus { border-color: #A3A3A3; box-shadow: 0 0 0 3px rgba(0,0,0,.04); }
+  html[data-theme="dark"] .cx-input { background-color: var(--cx-panel) !important; border-color: var(--cx-border-strong) !important; color: var(--cx-text) !important; }
+  html[data-theme="dark"] .cx-input::placeholder { color: #71717A !important; }
+
+  .cx-tabs { display: flex; flex: 0 0 auto; border-bottom: 1px solid var(--cx-border); padding: 0 8px; }
+  .cx-tab { flex: 1 1 0; height: 42px; font-size: 13px; line-height: 1; font-weight: 500; color: var(--cx-muted); border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color .12s ease, border-color .12s ease; }
+  .cx-tab:hover { color: var(--cx-text); }
+  .cx-tab[data-active="true"] { color: var(--cx-text); border-bottom-color: var(--cx-text); }
+  .cx-tab .cx-tab-count { font-size: 11px; opacity: .65; margin-left: 3px; }
+  /* ── Command palette ────────────────────────────────────────────── */
+  .cx-palette { width: min(560px, calc(100vw - 48px)); margin: 12vh auto 0; background: var(--cx-panel); border: 1px solid var(--cx-border-strong); border-radius: 12px; box-shadow: 0 24px 70px rgba(0,0,0,.5); overflow: hidden; }
+  .cx-palette-row { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 14px; border-bottom: 1px solid var(--cx-border); color: var(--cx-muted); }
+  .cx-palette input { flex: 1 1 auto; height: 40px; background: transparent !important; border: 0 !important; outline: none; padding: 0 !important; font-size: 14px; color: var(--cx-text) !important; }
+  .cx-palette input::placeholder { color: var(--cx-muted) !important; }
+  html[data-theme="dark"] .cx-palette input { background: transparent !important; border: 0 !important; box-shadow: none !important; color: var(--cx-text) !important; }
+  .cx-palette-item { display: flex; align-items: center; gap: 10px; width: 100%; height: 36px; padding: 0 10px; border-radius: 8px; text-align: left; font-size: 13px; color: var(--cx-text-2); }
+  .cx-palette-item:hover, .cx-palette-item[data-active="true"] { background: var(--cx-hover); color: var(--cx-text); }
+  .cx-palette-item svg { width: 15px; height: 15px; color: var(--cx-muted); flex: 0 0 15px; }
+  .cx-palette-hint { margin-left: auto; font-size: 11px; color: var(--cx-muted); }
+  .cx-palette-foot { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-top: 1px solid var(--cx-border); font-size: 11px; color: var(--cx-muted); background: var(--cx-panel-2); }
+  .cx-palette-foot .cx-kbd { margin-left: 0; }
+
+  /* ── Project cards ──────────────────────────────────────────────── */
+  .cx-project-card { display: flex; flex-direction: column; height: 100%; padding: 16px; border-radius: 12px; background: var(--cx-panel); border: 1px solid var(--cx-border); cursor: pointer; transition: border-color .15s ease, background-color .15s ease, transform .15s ease; }
+  .cx-project-card:hover { border-color: var(--cx-border-strong); background: var(--cx-panel-2); transform: translateY(-1px); }
+  .cx-project-title { font-size: 14px; line-height: 20px; font-weight: 600; color: var(--cx-text); overflow-wrap: anywhere; transition: color .12s ease; }
+  .cx-project-card:hover .cx-project-title { color: #FFFFFF; }
+  html[data-theme="light"] .cx-project-card:hover .cx-project-title { color: #000000; }
+  .cx-project-stat { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; line-height: 16px; color: var(--cx-muted); font-variant-numeric: tabular-nums; }
+  .cx-project-stat svg { width: 13px; height: 13px; }
+  .cx-project-foot { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--cx-row-border); display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
+
+  /* ── Graph / board ──────────────────────────────────────────────── */
+  .cx-graph-head { flex: 0 0 auto; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 24px 32px 16px; border-bottom: 1px solid var(--cx-topbar-border); }
+  .cx-board-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; background: var(--cx-canvas); }
+  .cx-board-page { padding: 16px 32px 32px; }
+  .cx-board-card { border-radius: 8px; border: 1px solid var(--cx-border); border-left-width: 3px; background: var(--cx-panel-2); padding: 12px; transition: border-color .12s ease, background-color .12s ease; }
+  .cx-board-card:hover { border-color: var(--cx-border-strong); background: var(--cx-hover); }
+
+  /* ── Legacy dark overrides (inner views) ───────────────────────── */
+  html[data-theme="dark"] .bg-slate-50 { background-color: var(--cx-canvas) !important; }
+  html[data-theme="dark"] .bg-slate-50\/40 { background-color: rgba(10,10,10,0.40) !important; }
+  html[data-theme="dark"] .bg-slate-50\/80 { background-color: rgba(31,31,31,0.80) !important; }
+  html[data-theme="dark"] .bg-slate-100 { background-color: var(--cx-panel-2) !important; }
+  html[data-theme="dark"] .bg-slate-200 { background-color: #333333 !important; }
+  html[data-theme="dark"] .bg-white { background-color: var(--cx-panel) !important; }
+  html[data-theme="dark"] .bg-white\/70 { background-color: rgba(23,23,23,0.70) !important; }
+  html[data-theme="dark"] .bg-white\/80 { background-color: rgba(23,23,23,0.85) !important; }
+  html[data-theme="dark"] .bg-white\/90 { background-color: rgba(23,23,23,0.90) !important; }
+  html[data-theme="dark"] .bg-white\/92 { background-color: rgba(23,23,23,0.92) !important; }
+  html[data-theme="dark"] .bg-white\/95 { background-color: rgba(23,23,23,0.95) !important; }
+  html[data-theme="dark"] .border-slate-100 { border-color: var(--cx-row-border) !important; }
+  html[data-theme="dark"] .border-slate-200,
+  html[data-theme="dark"] .border-slate-200\/60,
+  html[data-theme="dark"] .border-slate-200\/70,
+  html[data-theme="dark"] .border-slate-200\/80,
+  html[data-theme="dark"] .border-slate-300 { border-color: var(--cx-border) !important; }
+  html[data-theme="dark"] .text-slate-800,
+  html[data-theme="dark"] .text-slate-700,
+  html[data-theme="dark"] .text-slate-600 { color: var(--cx-text) !important; }
+  html[data-theme="dark"] .text-slate-500,
+  html[data-theme="dark"] .text-slate-400 { color: var(--cx-muted) !important; }
+  html[data-theme="dark"] .text-slate-300 { color: #7A7A7A !important; }
+  html[data-theme="dark"] .text-slate-200 { color: #525252 !important; }
+  html[data-theme="dark"] .hover\:bg-slate-50:hover,
+  html[data-theme="dark"] .hover\:bg-slate-100:hover { background-color: var(--cx-hover) !important; }
+  html[data-theme="dark"] .hover\:bg-white:hover { background-color: var(--cx-hover) !important; }
+  html[data-theme="dark"] .hover\:bg-slate-50\/70:hover { background-color: rgba(31,31,31,0.70) !important; }
+  html[data-theme="dark"] .hover\:bg-amber-50\/40:hover { background-color: rgba(245,158,11,0.10) !important; }
+  html[data-theme="dark"] .hover\:border-slate-300:hover { border-color: var(--cx-border-strong) !important; }
+  html[data-theme="dark"] .hover\:bg-brand-50:hover { background-color: rgba(139,92,246,0.16) !important; }
+  html[data-theme="dark"] .hover\:bg-teal-50:hover { background-color: rgba(20,184,166,0.16) !important; }
+  html[data-theme="dark"] .hover\:bg-amber-50:hover { background-color: rgba(245,158,11,0.16) !important; }
+  html[data-theme="dark"] .hover\:bg-rose-50:hover { background-color: rgba(244,63,94,0.16) !important; }
+  html[data-theme="dark"] .hover\:bg-violet-50:hover { background-color: rgba(139,92,246,0.16) !important; }
+  html[data-theme="dark"] .hover\:bg-sky-50:hover { background-color: rgba(14,165,233,0.16) !important; }
+  html[data-theme="dark"] .hover\:border-brand-300:hover { border-color: rgba(139,92,246,0.55) !important; }
+  html[data-theme="dark"] .hover\:border-amber-300:hover { border-color: rgba(245,158,11,0.55) !important; }
+  html[data-theme="dark"] .hover\:border-teal-300:hover { border-color: rgba(20,184,166,0.55) !important; }
+  html[data-theme="dark"] .hover\:text-slate-600:hover,
+  html[data-theme="dark"] .hover\:text-slate-700:hover { color: var(--cx-text) !important; }
+  html[data-theme="dark"] .bg-brand-50 { background-color: rgba(139,92,246,0.14) !important; }
+  html[data-theme="dark"] .bg-brand-50\/80 { background-color: rgba(139,92,246,0.14) !important; }
+  html[data-theme="dark"] .bg-teal-50 { background-color: rgba(20,184,166,0.12) !important; }
+  html[data-theme="dark"] .bg-amber-50 { background-color: rgba(245,158,11,0.12) !important; }
+  html[data-theme="dark"] .bg-rose-50 { background-color: rgba(244,63,94,0.12) !important; }
+  html[data-theme="dark"] .bg-violet-50 { background-color: rgba(139,92,246,0.12) !important; }
+  html[data-theme="dark"] .bg-violet-50\/70 { background-color: rgba(139,92,246,0.12) !important; }
+  html[data-theme="dark"] .bg-violet-50\/80 { background-color: rgba(139,92,246,0.16) !important; }
+  html[data-theme="dark"] .bg-amber-50\/80 { background-color: rgba(245,158,11,0.16) !important; }
+  html[data-theme="dark"] .bg-sky-50 { background-color: rgba(14,165,233,0.12) !important; }
+  html[data-theme="dark"] .bg-teal-100 { background-color: rgba(20,184,166,0.18) !important; }
+  html[data-theme="dark"] .bg-violet-100 { background-color: rgba(139,92,246,0.18) !important; }
+  html[data-theme="dark"] .text-brand-500 { color: #A78BFA !important; }
+  html[data-theme="dark"] .text-brand-600,
+  html[data-theme="dark"] .text-brand-700 { color: #C4B5FD !important; }
+  html[data-theme="dark"] .text-teal-600,
+  html[data-theme="dark"] .text-teal-700 { color: #5EEAD4 !important; }
+  html[data-theme="dark"] .text-amber-700 { color: #FCD34D !important; }
+  html[data-theme="dark"] .text-amber-800 { color: #FCD34D !important; }
+  html[data-theme="dark"] .text-amber-600\/80 { color: rgba(252,211,77,0.85) !important; }
+  html[data-theme="dark"] .text-orange-600 { color: #FDBA74 !important; }
+  html[data-theme="dark"] .text-rose-500,
+  html[data-theme="dark"] .text-rose-600 { color: #FDA4AF !important; }
+  html[data-theme="dark"] .text-violet-600,
+  html[data-theme="dark"] .text-violet-700 { color: #C4B5FD !important; }
+  html[data-theme="dark"] .text-sky-600,
+  html[data-theme="dark"] .text-sky-700 { color: #7DD3FC !important; }
+  html[data-theme="dark"] .border-brand-200 { border-color: rgba(139,92,246,0.35) !important; }
+  html[data-theme="dark"] .border-teal-200 { border-color: rgba(20,184,166,0.35) !important; }
+  html[data-theme="dark"] .border-amber-200 { border-color: rgba(245,158,11,0.35) !important; }
+  html[data-theme="dark"] .border-rose-200 { border-color: rgba(244,63,94,0.35) !important; }
+  html[data-theme="dark"] .border-violet-200 { border-color: rgba(139,92,246,0.35) !important; }
+  html[data-theme="dark"] .border-sky-200 { border-color: rgba(14,165,233,0.35) !important; }
+  html[data-theme="dark"] input,
+  html[data-theme="dark"] textarea,
+  html[data-theme="dark"] select { background-color: var(--cx-canvas) !important; color: var(--cx-text) !important; border-color: var(--cx-border-strong) !important; }
+  html[data-theme="dark"] input::placeholder,
+  html[data-theme="dark"] textarea::placeholder { color: #71717A !important; }
+  html[data-theme="dark"] .overlay { background: rgba(0,0,0,0.65) !important; }
+  html[data-theme="dark"] #cy { background: var(--cx-canvas) !important; }
+  html[data-theme="dark"] .shadow-slate-200\/50,
+  html[data-theme="dark"] .shadow-slate-200\/40 { box-shadow: none !important; }
+  .board-clamp { display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
+  .board-card { transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease; }
+  .board-card:hover { transform: translateY(-1px); }
+
+  @media (max-width: 900px) {
+    .cx-page { padding: 20px 20px 40px; }
+    .cx-graph-head { padding: 14px 20px; }
+    .cx-board-page { padding: 14px 20px 28px; }
+    .cx-topbar { padding: 0 16px 0 20px; }
+  }
+
 </style>
 <script>
   tailwind.config = {
@@ -226,207 +619,508 @@
   }
 </script>
 </head>
-<body class="bg-slate-50 text-slate-800 h-screen flex flex-col overflow-hidden" :class="{ 'select-none cursor-col-resize': isResizingPanel }" x-data="cairnApp()">
+<body class="h-screen overflow-hidden" :class="{ 'select-none cursor-col-resize': isResizingPanel }" x-data="cairnApp()">
 
-<!-- ═══════════ PROJECT LIST VIEW ═══════════ -->
-<div x-show="view === 'list'" x-cloak class="flex-1 flex flex-col overflow-hidden">
-  <header class="bg-white/80 backdrop-blur border-b border-slate-200/60 px-4 py-2.5 flex items-center gap-3 shrink-0">
-    <div class="flex items-center gap-2.5 min-w-0">
-      <div class="h-8 w-8 rounded-lg border border-slate-200 bg-white shadow-sm shadow-slate-200/40 flex items-center justify-center shrink-0 overflow-hidden">
-        <img src="/static/favicon.svg" alt="" class="w-5 h-5 block">
+<div class="cx-shell" :data-collapsed="sidebarCollapsed ? 'true' : 'false'">
+
+  <!-- ═══════════ SIDEBAR ═══════════ -->
+  <aside class="cx-sidebar" aria-label="Primary navigation">
+    <div class="cx-sidebar-head">
+      <span class="cx-logo" aria-hidden="true">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <path d="M7.4 16.1 10.8 9.9M13.2 9.9l3.4 6.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+          <circle cx="5.6" cy="17.6" r="2.1" stroke="currentColor" stroke-width="1.7"/>
+          <circle cx="12" cy="8.1" r="2.1" stroke="currentColor" stroke-width="1.7"/>
+          <circle cx="18.4" cy="17.6" r="2.1" stroke="currentColor" stroke-width="1.7"/>
+        </svg>
+      </span>
+      <span class="cx-brand" x-show="!sidebarCollapsed">CAIRN</span>
+    </div>
+
+    <nav class="cx-nav">
+      <div class="cx-nav-group" x-show="!sidebarCollapsed">Workspace</div>
+      <button type="button" class="cx-nav-item" :data-active="view === 'dashboard' ? 'true' : 'false'" @click="goDashboard()" title="Dashboard" aria-label="Dashboard" @mouseenter="showNavTip($event, 'Dashboard')" @mouseleave="hideNavTip()" @focus="showNavTip($event, 'Dashboard')" @blur="hideNavTip()">
+        <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg>
+        <span class="cx-nav-label">Dashboard</span>
+      </button>
+      <button type="button" class="cx-nav-item" :data-active="view === 'list' ? 'true' : 'false'" @click="goProjects()" title="Projects" aria-label="Projects" @mouseenter="showNavTip($event, 'Projects')" @mouseleave="hideNavTip()" @focus="showNavTip($event, 'Projects')" @blur="hideNavTip()">
+        <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M3.5 7.5A1.5 1.5 0 0 1 5 6h4l2 2.5h8a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 19 19.5H5A1.5 1.5 0 0 1 3.5 18V7.5Z"/></svg>
+        <span class="cx-nav-label">Projects</span>
+      </button>
+      <button type="button" class="cx-nav-item" :data-active="view === 'graph' ? 'true' : 'false'" @click="goGraph()" title="Graph" aria-label="Graph" @mouseenter="showNavTip($event, 'Graph')" @mouseleave="hideNavTip()" @focus="showNavTip($event, 'Graph')" @blur="hideNavTip()">
+        <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><circle cx="6" cy="17" r="2.4"/><circle cx="12" cy="6.5" r="2.4"/><circle cx="18" cy="17" r="2.4"/><path d="m7.5 14.9 3.2-6.2m2.6 0 3.2 6.2M8.4 17h7.2"/></svg>
+        <span class="cx-nav-label">Graph</span>
+      </button>
+
+      <div class="cx-nav-group" x-show="!sidebarCollapsed">System</div>
+      <button type="button" class="cx-nav-item" :data-active="showSettings ? 'true' : 'false'" @click="loadSettings(); showSettings = true" title="Settings" aria-label="Settings" @mouseenter="showNavTip($event, 'Settings')" @mouseleave="hideNavTip()" @focus="showNavTip($event, 'Settings')" @blur="hideNavTip()">
+        <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 12h4M12 12h8M4 17h12M20 17h0"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="17" r="2"/></svg>
+        <span class="cx-nav-label">Settings</span>
+      </button>
+    </nav>
+
+    <div class="cx-sidebar-foot">
+      <button type="button" class="cx-avatar" @click="showLocalPrefs = true" :title="`Actor: ${actorName()}`" :aria-label="`Actor: ${actorName()}`">
+        <span x-text="actorInitial()"></span>
+      </button>
+      <div class="min-w-0 flex-1" x-show="!sidebarCollapsed">
+        <div class="cx-actor" x-text="actorName()"></div>
+        <div class="cx-actor-sub">Local actor</div>
       </div>
-      <span class="font-semibold text-slate-700 tracking-tight">Cairn</span>
-    </div>
-    <div class="flex-1"></div>
-    <div class="flex items-center gap-3 text-[11px] text-slate-400">
-      <span class="inline-flex items-center gap-1.5 shrink-0" title="All projects">
-        <span class="font-medium uppercase tracking-[0.12em] text-slate-400">All</span>
-        <span class="font-semibold text-slate-600 tabular-nums" x-text="projects.length"></span>
-      </span>
-      <span class="inline-flex items-center gap-1.5 shrink-0" title="Active projects">
-        <span class="h-1.5 w-1.5 rounded-full bg-teal-500"></span>
-        <span class="font-semibold text-teal-700 tabular-nums" x-text="countProjectsByStatus('active')"></span>
-      </span>
-      <span class="inline-flex items-center gap-1.5 shrink-0" title="Stopped projects">
-        <span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
-        <span class="font-semibold text-amber-700 tabular-nums" x-text="countProjectsByStatus('stopped')"></span>
-      </span>
-      <span class="inline-flex items-center gap-1.5 shrink-0" title="Completed projects">
-        <span class="h-1.5 w-1.5 rounded-full bg-slate-400"></span>
-        <span class="font-semibold text-slate-600 tabular-nums" x-text="countProjectsByStatus('completed')"></span>
-      </span>
-      <button type="button"
-        @click="stopAllActiveProjects()"
-        :disabled="!hasActiveProjects() || isStoppingAllProjects"
-        class="h-7 px-2.5 rounded-lg border border-amber-200 text-xs text-amber-700 hover:bg-amber-50 transition inline-flex items-center gap-1.5 shrink-0 disabled:cursor-not-allowed disabled:opacity-40"
-        title="Stop all active projects">
-        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
-        <span x-text="isStoppingAllProjects ? 'Stopping...' : 'Stop Active'"></span>
+      <button type="button" class="cx-icon-btn" x-show="!sidebarCollapsed" @click="toggleSidebar()" title="Collapse sidebar" aria-label="Collapse sidebar">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></svg>
       </button>
     </div>
-    <div class="flex items-center gap-1.5">
-      <button @click="showNewProject = true" class="h-7 px-2.5 rounded-lg border border-brand-200 text-xs text-brand-600 hover:bg-brand-50 transition inline-flex items-center gap-1.5">
-        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
-        New Project
-      </button>
-    </div>
-    <div class="flex items-center gap-1.5 ml-1">
-      <button @click="showLocalPrefs = true" class="h-7 max-w-40 px-2.5 rounded-lg border border-slate-200 text-xs text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition inline-flex items-center shrink-0">
-        <span class="truncate block" x-text="actorName()"></span>
-      </button>
-      <button @click="loadSettings(); showSettings = true" class="h-7 w-7 rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition inline-flex items-center justify-center shrink-0">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7 7 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a7 7 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a7 7 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a7 7 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"/><path d="M15 12a3 3 0 1 1-6 0-3 3 0 0 1 6 0Z"/></svg>
-      </button>
-    </div>
-  </header>
+  </aside>
+  <div x-show="navTip.show" x-cloak class="cx-nav-tip" :style="`top: ${navTip.top}px`" x-text="navTip.text"></div>
 
-  <div x-ref="projectListScroll" @scroll.passive="rememberProjectListScroll()" class="flex-1 overflow-y-auto p-4">
-    <template x-if="projects.length === 0">
-      <div class="flex flex-col items-center justify-center h-full text-slate-400">
-        <img src="/static/favicon.svg" alt="" class="w-20 h-20 mb-5 opacity-30">
-        <p class="text-lg font-medium text-slate-500">No projects yet</p>
-        <p class="text-sm mt-1">Create a project to start exploring</p>
-      </div>
-    </template>
+  <!-- ═══════════ MAIN COLUMN ═══════════ -->
+  <div class="cx-main">
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-      <template x-for="p in projects" :key="p.id">
-        <div @click="openProject(p.id)"
-          class="group h-full flex flex-col bg-white rounded-2xl border border-slate-200/60 p-5 cursor-pointer transition-all duration-200 hover:shadow-lg hover:shadow-slate-200/50 hover:border-slate-300 hover:-translate-y-0.5">
-          <div class="flex items-start justify-between mb-3">
-            <span class="text-[11px] font-mono text-slate-400 tracking-wide" x-text="p.id"></span>
-            <span class="px-1.5 py-0.5 rounded-full text-[9px] font-semibold uppercase tracking-[0.12em]"
-              :class="projectStatusBadgeClass(p.status)"
-              x-text="p.status"></span>
+    <header class="cx-topbar">
+      <button type="button" class="cx-icon-btn" @click="toggleSidebar()" :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'" aria-label="Toggle sidebar">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
+      </button>
+      <span class="cx-divider"></span>
+      <button type="button" class="cx-search-trigger" @click="openSearch()" title="Search projects and pages">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m16.5 16.5 3.5 3.5"/></svg>
+        <span>Search</span>
+        <span class="cx-kbd">⌘K</span>
+      </button>
+      <nav class="cx-crumbs" aria-label="Breadcrumb">
+        <button type="button" class="cx-crumb" x-show="view !== 'dashboard'" @click="goDashboard()">Dashboard</button>
+        <span class="cx-crumb-sep" x-show="view !== 'dashboard'">/</span>
+        <span class="cx-crumb-current" x-show="view === 'dashboard'">Dashboard</span>
+        <button type="button" class="cx-crumb" x-show="view === 'graph'" @click="goProjects()">Projects</button>
+        <span class="cx-crumb-sep" x-show="view === 'graph'">/</span>
+        <span class="cx-crumb-current" x-show="view === 'graph'" x-text="project?.project?.title || project?.project?.id || ''"></span>
+        <span class="cx-crumb-current" x-show="view === 'list'">Projects</span>
+      </nav>
+      <div class="flex-1"></div>
+      <span class="cx-version">v0.2.1</span>
+      <button type="button" class="cx-icon-btn" @click="toggleTheme()" :title="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'" :aria-label="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'">
+        <svg width="16" height="16" x-show="theme !== 'dark'" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+        <svg width="16" height="16" x-show="theme === 'dark'" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/></svg>
+      </button>
+      <button type="button" class="cx-avatar-sm" @click="showLocalPrefs = true" :title="`Local preferences — ${actorName()}`" :aria-label="`Local preferences — ${actorName()}`">
+        <span x-text="actorInitial()"></span>
+      </button>
+    </header>
+
+    <div class="cx-content">
+
+      <!-- ═══════════ DASHBOARD VIEW ═══════════ -->
+      <div x-show="view === 'dashboard'" x-cloak class="cx-scroll">
+        <div class="cx-page">
+          <div class="cx-page-head">
+            <div class="min-w-0">
+              <h1 class="cx-page-title">Dashboard</h1>
+              <p class="cx-page-sub">Live overview of projects, findings and intents in this workspace.</p>
+            </div>
+            <div class="flex items-center gap-2 ml-auto">
+              <button type="button" class="cx-btn cx-btn--primary" @click="showNewProject = true">
+                <svg fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                New project
+              </button>
+            </div>
           </div>
-          <div class="mb-3 flex-1">
+
+          <!-- KPI row -->
+          <div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+            <div class="cx-kpi">
+              <div class="cx-kpi-label">
+                <svg fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path d="M3.5 7.5A1.5 1.5 0 0 1 5 6h4l2 2.5h8a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 19 19.5H5A1.5 1.5 0 0 1 3.5 18V7.5Z"/></svg>
+                <span>Projects</span>
+              </div>
+              <div class="cx-kpi-value" x-text="dashboardLoading ? '—' : formatNumber(projects.length)"></div>
+              <div class="cx-kpi-sub">
+                <span class="cx-teal" x-text="`${countProjectsByStatus('active')} active`"></span>
+                <span x-text="` · ${countProjectsByStatus('stopped')} stopped`"></span>
+              </div>
+            </div>
+            <div class="cx-kpi">
+              <div class="cx-kpi-label">
+                <svg fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path d="M3 12h3.5l2.75-6 3.5 12 2.75-7H21"/></svg>
+                <span>Active</span>
+              </div>
+              <div class="cx-kpi-value" x-text="dashboardLoading ? '—' : formatNumber(countProjectsByStatus('active'))"></div>
+              <div class="cx-kpi-sub">
+                <span class="cx-amber" x-text="`${countProjectsByStatus('stopped')} stopped`"></span>
+                <span x-text="` · ${countProjectsByStatus('completed')} completed`"></span>
+              </div>
+            </div>
+            <div class="cx-kpi">
+              <div class="cx-kpi-label">
+                <svg fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="4"/></svg>
+                <span>Findings</span>
+              </div>
+              <div class="cx-kpi-value" x-text="dashboardLoading ? '—' : formatNumber(dashboardStats().facts)"></div>
+              <div class="cx-kpi-sub" x-text="`across ${projects.length} project${projects.length === 1 ? '' : 's'}`"></div>
+            </div>
+            <div class="cx-kpi">
+              <div class="cx-kpi-label">
+                <svg fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+                <span>Intents</span>
+              </div>
+              <div class="cx-kpi-value" x-text="dashboardLoading ? '—' : formatNumber(dashboardStats().intents)"></div>
+              <div class="cx-kpi-sub" x-text="`${dashboardStats().open} open · ${dashboardStats().concluded} concluded`"></div>
+            </div>
+            <div class="cx-kpi">
+              <div class="cx-kpi-label">
+                <svg fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>
+                <span>Working intents</span>
+              </div>
+              <div class="cx-kpi-value" x-text="dashboardLoading ? '—' : formatNumber(dashboardStats().working)"></div>
+              <div class="cx-kpi-sub" x-text="`${dashboardStats().unclaimed} unclaimed`"></div>
+            </div>
+          </div>
+
+          <!-- Recent projects -->
+          <section class="cx-card mt-3">
+            <div class="cx-card-head">
+              <h2 class="cx-card-title">Recent projects</h2>
+              <button type="button" class="cx-link" @click="goProjects()">
+                View all
+                <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M7 17 17 7M9 7h8v8"/></svg>
+              </button>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="cx-table">
+                <thead>
+                  <tr>
+                    <th>Project</th>
+                    <th>Status</th>
+                    <th class="cx-num">Findings</th>
+                    <th class="cx-num">Intents</th>
+                    <th class="cx-num hidden xl:table-cell">Working</th>
+                    <th class="hidden xl:table-cell">Created</th>
+                    <th class="w-8"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="p in dashboardProjects()" :key="`dash-${p.id}`">
+                    <tr class="cx-row" @click="openProject(p.id)">
+                      <td>
+                        <div class="cx-row-title" x-text="p.title"></div>
+                        <div class="cx-row-sub" x-text="p.id"></div>
+                      </td>
+                      <td>
+                        <span class="cx-pill" :class="projectStatusPillClass(p.status)">
+                          <span class="cx-dot"></span>
+                          <span x-text="p.status"></span>
+                        </span>
+                      </td>
+                      <td class="cx-num" x-text="formatNumber(p.fact_count)"></td>
+                      <td class="cx-num" x-text="formatNumber(p.intent_count)"></td>
+                      <td class="cx-num hidden xl:table-cell" x-text="formatNumber(p.working_intent_count)"></td>
+                      <td class="hidden xl:table-cell cx-meta" x-text="formatShortDate(p.created_at)"></td>
+                      <td>
+                        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24" class="text-[var(--cx-muted)] opacity-60"><path d="m9 6 6 6-6 6"/></svg>
+                      </td>
+                    </tr>
+                  </template>
+                  <template x-if="dashboardLoading && projects.length === 0">
+                    <tr>
+                      <td colspan="7">
+                        <div class="space-y-2 py-2">
+                          <div class="cx-skeleton h-4 w-48"></div>
+                          <div class="cx-skeleton h-3 w-32"></div>
+                        </div>
+                      </td>
+                    </tr>
+                  </template>
+                  <template x-if="!dashboardLoading && projects.length === 0">
+                    <tr>
+                      <td colspan="7">
+                        <div class="cx-empty">
+                          <svg fill="none" stroke="currentColor" stroke-width="1.4" viewBox="0 0 24 24"><path d="M3.5 7.5A1.5 1.5 0 0 1 5 6h4l2 2.5h8a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 19 19.5H5A1.5 1.5 0 0 1 3.5 18V7.5Z"/></svg>
+                          <p class="cx-empty-title">No projects yet</p>
+                          <p class="cx-empty-sub">Create a project with an origin and a goal to start exploring.</p>
+                          <button type="button" class="cx-btn cx-btn--primary mt-2" @click="showNewProject = true">New project</button>
+                        </div>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- Recent findings / intents -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-3">
+            <section class="cx-card">
+              <div class="cx-card-head">
+                <h2 class="cx-card-title">Recent findings</h2>
+                <span class="cx-meta" x-text="`${dashboardStats().facts} total`"></span>
+              </div>
+              <div>
+                <template x-for="item in dashboardFindings()" :key="`df-${item.projectId}-${item.factId}`">
+                  <button type="button" class="cx-feed-item" @click="openDashboardFinding(item)">
+                    <div class="cx-feed-top">
+                      <span class="cx-code" :class="factIdToneClass(item.factId)" x-text="item.factId"></span>
+                      <span class="cx-meta truncate" x-text="item.projectTitle"></span>
+                    </div>
+                    <p class="cx-feed-text" x-text="item.description"></p>
+                    <div class="cx-feed-meta">
+                      <span x-text="item.factId === 'origin' ? 'Project starting point' : item.factId === 'goal' ? 'Project target' : item.producer ? `Produced by ${item.producer}` : 'Project fact'"></span>
+                      <span aria-hidden="true">·</span>
+                      <span x-text="relativeTime(item.ts)"></span>
+                    </div>
+                  </button>
+                </template>
+                <template x-if="dashboardLoading">
+                  <div class="space-y-3 p-4">
+                    <div class="cx-skeleton h-3 w-16"></div>
+                    <div class="cx-skeleton h-3 w-full"></div>
+                    <div class="cx-skeleton h-3 w-2/3"></div>
+                  </div>
+                </template>
+                <template x-if="!dashboardLoading && dashboardFindings().length === 0">
+                  <div class="cx-empty">
+                    <svg fill="none" stroke="currentColor" stroke-width="1.4" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 8v4m0 4h.01"/></svg>
+                    <p class="cx-empty-title">No findings yet</p>
+                    <p class="cx-empty-sub">Facts produced by concluded intents will appear here.</p>
+                  </div>
+                </template>
+              </div>
+            </section>
+
+            <section class="cx-card">
+              <div class="cx-card-head">
+                <h2 class="cx-card-title">Recent intents</h2>
+                <span class="cx-meta" x-text="`${dashboardStats().intents} total`"></span>
+              </div>
+              <div>
+                <template x-for="item in dashboardIntents()" :key="`di-${item.projectId}-${item.id}`">
+                  <button type="button" class="cx-feed-item" @click="openDashboardIntent(item)">
+                    <div class="cx-feed-top">
+                      <span class="cx-code cx-code--violet" x-text="item.id"></span>
+                      <span class="cx-pill" :class="intentPillClass(item)">
+                        <span class="cx-dot"></span>
+                        <span x-text="item.statusLabel"></span>
+                      </span>
+                    </div>
+                    <p class="cx-feed-text" x-text="item.description"></p>
+                    <div class="cx-feed-meta">
+                      <span x-text="`${item.projectTitle} · from ${item.from || '—'}`"></span>
+                      <span aria-hidden="true">·</span>
+                      <span x-text="relativeTime(item.ts)"></span>
+                    </div>
+                  </button>
+                </template>
+                <template x-if="dashboardLoading">
+                  <div class="space-y-3 p-4">
+                    <div class="cx-skeleton h-3 w-16"></div>
+                    <div class="cx-skeleton h-3 w-full"></div>
+                    <div class="cx-skeleton h-3 w-2/3"></div>
+                  </div>
+                </template>
+                <template x-if="!dashboardLoading && dashboardIntents().length === 0">
+                  <div class="cx-empty">
+                    <svg fill="none" stroke="currentColor" stroke-width="1.4" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+                    <p class="cx-empty-title">No intents yet</p>
+                    <p class="cx-empty-sub">Open a project to declare the first intent from its facts.</p>
+                  </div>
+                </template>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════ PROJECTS VIEW ═══════════ -->
+      <div x-show="view === 'list'" x-cloak class="flex-1 flex flex-col overflow-hidden">
+        <div x-ref="projectListScroll" @scroll.passive="rememberProjectListScroll()" class="cx-scroll">
+          <div class="cx-page">
+            <div class="cx-page-head">
+              <div class="min-w-0">
+                <h1 class="cx-page-title">Projects</h1>
+                <p class="cx-page-sub">Every research project in this workspace — open one to inspect its graph and board.</p>
+              </div>
+              <div class="flex flex-wrap items-center gap-2 ml-auto">
+                <div class="cx-meta flex items-center gap-3 mr-1">
+                  <span class="inline-flex items-center gap-1.5" title="All projects">
+                    <span class="font-medium text-[var(--cx-text-2)]">All</span>
+                    <span class="tabular-nums" x-text="projects.length"></span>
+                  </span>
+                  <span class="inline-flex items-center gap-1.5" title="Active projects">
+                    <span class="h-1.5 w-1.5 rounded-full bg-teal-500"></span>
+                    <span class="tabular-nums" x-text="countProjectsByStatus('active')"></span>
+                  </span>
+                  <span class="inline-flex items-center gap-1.5" title="Stopped projects">
+                    <span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+                    <span class="tabular-nums" x-text="countProjectsByStatus('stopped')"></span>
+                  </span>
+                  <span class="inline-flex items-center gap-1.5" title="Completed projects">
+                    <span class="h-1.5 w-1.5 rounded-full bg-slate-400"></span>
+                    <span class="tabular-nums" x-text="countProjectsByStatus('completed')"></span>
+                  </span>
+                </div>
+                <button type="button" @click="stopAllActiveProjects()" :disabled="!hasActiveProjects() || isStoppingAllProjects" class="cx-btn cx-btn--amber" title="Stop all active projects">
+                  <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
+                  <span x-text="isStoppingAllProjects ? 'Stopping…' : 'Stop active'"></span>
+                </button>
+                <button type="button" @click="showNewProject = true" class="cx-btn cx-btn--primary" title="Create a new project">
+                  <svg fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                  New project
+                </button>
+              </div>
+            </div>
+
+            <template x-if="projects.length === 0">
+              <div class="cx-card">
+                <div class="cx-empty py-14">
+                  <svg fill="none" stroke="currentColor" stroke-width="1.3" viewBox="0 0 24 24"><path d="M3.5 7.5A1.5 1.5 0 0 1 5 6h4l2 2.5h8a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 19 19.5H5A1.5 1.5 0 0 1 3.5 18V7.5Z"/></svg>
+                  <p class="cx-empty-title text-sm">No projects yet</p>
+                  <p class="cx-empty-sub">Create a project to start exploring.</p>
+                  <button type="button" class="cx-btn cx-btn--primary mt-2" @click="showNewProject = true">New project</button>
+                </div>
+              </div>
+            </template>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+
+      <template x-for="p in projects" :key="p.id">
+        <div @click="openProject(p.id)" class="cx-project-card group">
+          <div class="flex items-start justify-between gap-2">
+            <span class="text-[11px] font-mono text-[var(--cx-muted)] tracking-wide" x-text="p.id"></span>
+            <span class="cx-pill" :class="projectStatusPillClass(p.status)">
+              <span class="cx-dot"></span>
+              <span x-text="p.status"></span>
+            </span>
+          </div>
+          <div class="mt-3 flex-1">
             <div class="title-action-trigger flex items-start gap-2">
-              <h3 class="min-w-0 flex-1 text-[15px] font-semibold text-slate-700 break-words [overflow-wrap:anywhere] group-hover:text-brand-600 transition-colors" x-text="p.title"></h3>
+              <h3 class="cx-project-title min-w-0 flex-1" x-text="p.title"></h3>
               <button type="button"
                 @click.stop="openRenameProject(p.id, p.title)"
-                class="title-action-button mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400"
+                class="title-action-button mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-[var(--cx-border)] text-[var(--cx-muted)] hover:border-[var(--cx-border-strong)] hover:bg-[var(--cx-hover)] hover:text-[var(--cx-text)] focus:outline-none focus:ring-2 focus:ring-white/10"
                 title="Rename project"
                 :aria-label="`Rename ${p.title}`">
-                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="m16.862 4.487 1.65-1.65a1.875 1.875 0 1 1 2.652 2.652l-9.193 9.193a4.5 4.5 0 0 1-1.897 1.13L6 17l1.188-4.074a4.5 4.5 0 0 1 1.13-1.897l8.544-8.542Z"/><path d="M19.5 7.125 16.875 4.5"/><path d="M5.25 18.75h13.5"/></svg>
+                <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="m16.862 4.487 1.65-1.65a1.875 1.875 0 1 1 2.652 2.652l-9.193 9.193a4.5 4.5 0 0 1-1.897 1.13L6 17l1.188-4.074a4.5 4.5 0 0 1 1.13-1.897l8.544-8.542Z"/><path d="M19.5 7.125 16.875 4.5"/><path d="M5.25 18.75h13.5"/></svg>
               </button>
             </div>
             <div class="mt-2 flex flex-wrap items-center gap-1.5">
               <template x-if="p.reason">
                 <div class="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-2 py-1 text-[10px] font-medium text-sky-700 reason-chip-running">
-                  <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 3v3"/><path d="M18.364 5.636 16.95 7.05"/><path d="M21 12h-3"/><path d="m18.364 18.364-1.414-1.414"/><path d="M12 21v-3"/><path d="m7.05 16.95-1.414 1.414"/><path d="M6 12H3"/><path d="M7.05 7.05 5.636 5.636"/><circle cx="12" cy="12" r="3.5"/></svg>
+                  <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 3v3"/><path d="M18.364 5.636 16.95 7.05"/><path d="M21 12h-3"/><path d="m18.364 18.364-1.414-1.414"/><path d="M12 21v-3"/><path d="m7.05 16.95-1.414 1.414"/><path d="M6 12H3"/><path d="M7.05 7.05 5.636 5.636"/><circle cx="12" cy="12" r="3.5"/></svg>
                   <span x-text="reasonBadgeText(p.reason, true)"></span>
                 </div>
               </template>
               <template x-if="p.working_intent_count > 0">
                 <div class="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-medium text-amber-700 intent-chip-running">
-                  <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="8.5"/></svg>
+                  <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="8.5"/></svg>
                   <span x-text="workingIntentBadgeText(p.working_intent_count)"></span>
                 </div>
               </template>
             </div>
           </div>
-          <div class="flex items-center gap-3 text-[11px] text-slate-400">
-            <span class="flex items-center gap-1">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4m10-10h-4M6 12H2m15.07-7.07l-2.83 2.83M9.76 14.24l-2.83 2.83m11.14 0l-2.83-2.83M9.76 9.76L6.93 6.93"/></svg>
+          <div class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span class="cx-project-stat" title="Findings">
+              <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4m10-10h-4M6 12H2m15.07-7.07l-2.83 2.83M9.76 14.24l-2.83 2.83m11.14 0l-2.83-2.83M9.76 9.76L6.93 6.93"/></svg>
               <span x-text="p.fact_count"></span>
             </span>
-            <span class="flex items-center gap-1">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/></svg>
+            <span class="cx-project-stat" title="Intents">
+              <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"/></svg>
               <span x-text="p.intent_count"></span>
             </span>
             <template x-if="p.working_intent_count > 0">
-              <span class="flex items-center gap-1 text-amber-500">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="10"/></svg>
+              <span class="cx-project-stat text-amber-500" title="Working intents">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="10"/></svg>
                 <span x-text="p.working_intent_count"></span>
               </span>
             </template>
             <template x-if="p.unclaimed_intent_count > 0">
-              <span class="flex items-center gap-1 text-slate-400">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3 2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
+              <span class="cx-project-stat" title="Unclaimed intents">
+                <svg fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3 2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
                 <span x-text="p.unclaimed_intent_count"></span>
               </span>
             </template>
-            <span class="flex items-center gap-1">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 1 1 7.072 0l-.548.547A3.374 3.374 0 0 0 14 18.469V19a2 2 0 1 1-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547Z"/></svg>
+            <span class="cx-project-stat" title="Hints">
+              <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 1 1 7.072 0l-.548.547A3.374 3.374 0 0 0 14 18.469V19a2 2 0 1 1-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547Z"/></svg>
               <span x-text="p.hint_count"></span>
             </span>
           </div>
-          <div class="mt-1.5 flex items-center gap-1.5 text-[11px] text-slate-400">
-            <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path d="M8 2v3M16 2v3"/><path d="M3.5 9.5h17"/><rect x="3.5" y="4.5" width="17" height="16" rx="2.5"/><path d="M8 13h3M8 16h6"/></svg>
+          <div class="mt-1.5 flex items-center gap-1.5 text-[11px] text-[var(--cx-muted)]">
+            <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path d="M8 2v3M16 2v3"/><path d="M3.5 9.5h17"/><rect x="3.5" y="4.5" width="17" height="16" rx="2.5"/><path d="M8 13h3M8 16h6"/></svg>
             <span x-text="formatDate(p.created_at)"></span>
           </div>
-          <div class="mt-3 pt-3 border-t border-slate-100 flex items-center justify-end gap-1.5">
-            <div class="flex items-center justify-end gap-1.5 flex-wrap">
-              <button type="button" @click.stop="viewProjectYaml(p.id, p.title)"
-                class="px-2 py-1 rounded-lg border border-slate-200 text-[11px] text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition flex items-center gap-1">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M14.25 3H7.5A2.25 2.25 0 0 0 5.25 5.25v13.5A2.25 2.25 0 0 0 7.5 21h9a2.25 2.25 0 0 0 2.25-2.25V8.25L14.25 3Z"/><path d="M14.25 3v5.25h4.5"/><path d="M8.25 12h7.5M8.25 15h5.25"/></svg>
-                Snapshot
+          <div class="cx-project-foot">
+            <button type="button" @click.stop="viewProjectYaml(p.id, p.title)" class="cx-icon-action" title="View snapshot" aria-label="View snapshot">
+              <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M14.25 3H7.5A2.25 2.25 0 0 0 5.25 5.25v13.5A2.25 2.25 0 0 0 7.5 21h9a2.25 2.25 0 0 0 2.25-2.25V8.25L14.25 3Z"/><path d="M14.25 3v5.25h4.5"/><path d="M8.25 12h7.5M8.25 15h5.25"/></svg>
+            </button>
+            <template x-if="p.status !== 'completed'">
+              <button type="button" @click.stop="toggleProjectStopById(p.id, p.status)"
+                class="cx-icon-action" :class="p.status === 'active' ? 'cx-icon-action--amber' : ''"
+                :title="p.status === 'active' ? 'Stop project' : 'Resume project'"
+                :aria-label="p.status === 'active' ? 'Stop project' : 'Resume project'">
+                <svg x-show="p.status === 'active'" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
+                <svg x-show="p.status === 'stopped'" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7V5Z"/></svg>
               </button>
-              <template x-if="p.status !== 'completed'">
-                <button type="button" @click.stop="toggleProjectStopById(p.id, p.status)"
-                  class="px-2 py-1 rounded-lg border text-[11px] transition flex items-center gap-1"
-                  :class="p.status === 'active'
-                    ? 'border-amber-200 text-amber-600 hover:bg-amber-50'
-                    : 'border-teal-200 text-teal-600 hover:bg-teal-50'">
-                  <svg x-show="p.status === 'active'" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
-                  <svg x-show="p.status === 'stopped'" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7V5Z"/></svg>
-                  <span x-text="p.status === 'active' ? 'Stop' : 'Resume'"></span>
-                </button>
-              </template>
-              <template x-if="p.status === 'completed'">
-                <button type="button" @click.stop="openReopenProject(p.id, p.title)"
-                  class="px-2 py-1 rounded-lg border border-sky-200 text-[11px] text-sky-600 hover:bg-sky-50 transition flex items-center gap-1">
-                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.708"/><path d="M3 3v6h6"/></svg>
-                  Reopen
-                </button>
-              </template>
-              <button type="button" @click.stop="deleteProjectById(p.id, p.title)"
-                class="px-2 py-1 rounded-lg border border-rose-200 text-[11px] text-rose-500 hover:bg-rose-50 hover:text-rose-600 transition flex items-center gap-1">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4.75A1.75 1.75 0 0 1 9.75 3h4.5A1.75 1.75 0 0 1 16 4.75V6"/><path d="M19 6l-.63 11.338A2 2 0 0 1 16.37 19.5H7.63a2 2 0 0 1-1.997-2.162L5 6"/><path d="M10 10.5v5"/><path d="M14 10.5v5"/></svg>
-                Delete
+            </template>
+            <template x-if="p.status === 'completed'">
+              <button type="button" @click.stop="openReopenProject(p.id, p.title)" class="cx-icon-action" title="Reopen project" aria-label="Reopen project">
+                <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.708"/><path d="M3 3v6h6"/></svg>
               </button>
-            </div>
+            </template>
+            <button type="button" @click.stop="deleteProjectById(p.id, p.title)" class="cx-icon-action cx-icon-action--danger" title="Delete project" aria-label="Delete project">
+              <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4.75A1.75 1.75 0 0 1 9.75 3h4.5A1.75 1.75 0 0 1 16 4.75V6"/><path d="M19 6l-.63 11.338A2 2 0 0 1 16.37 19.5H7.63a2 2 0 0 1-1.997-2.162L5 6"/><path d="M10 10.5v5"/><path d="M14 10.5v5"/></svg>
+            </button>
           </div>
         </div>
       </template>
-    </div>
-  </div>
-</div>
+            </div>
+          </div>
+        </div>
+      </div>
 
 <!-- ═══════════ GRAPH VIEW ═══════════ -->
 <template x-if="view === 'graph'">
 <div class="flex-1 flex flex-col overflow-hidden">
-  <header class="bg-white/80 backdrop-blur border-b border-slate-200/60 px-4 py-2.5 flex items-center gap-3 shrink-0 z-20">
-    <button @click="backToList()" class="p-1.5 rounded-lg hover:bg-slate-100 transition text-slate-400 hover:text-slate-600">
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7"/></svg>
-    </button>
-    <div class="title-action-trigger flex items-center gap-2 min-w-0">
-      <span class="text-[11px] font-mono text-slate-400" x-text="project.project.id"></span>
-      <h2 class="text-[15px] font-semibold text-slate-700 truncate" x-text="project.project.title"></h2>
-      <button x-show="!replay.active" @click="openRenameProject(project.project.id, project.project.title)"
-        class="title-action-button inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400"
-        title="Rename project"
-        :aria-label="`Rename ${project.project.title}`">
-        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="m16.862 4.487 1.65-1.65a1.875 1.875 0 1 1 2.652 2.652l-9.193 9.193a4.5 4.5 0 0 1-1.897 1.13L6 17l1.188-4.074a4.5 4.5 0 0 1 1.13-1.897l8.544-8.542Z"/><path d="M19.5 7.125 16.875 4.5"/><path d="M5.25 18.75h13.5"/></svg>
-      </button>
-      <span class="px-1.5 py-0.5 rounded-full text-[9px] font-semibold uppercase tracking-[0.12em] shrink-0"
-        :class="projectStatusBadgeClass(project.project.status)"
-        x-text="project.project.status"></span>
+    <div class="cx-graph-head relative z-20">
+    <div class="min-w-0">
+      <div class="flex items-center gap-2 min-w-0">
+        <button type="button" @click="backToList()" class="cx-icon-btn -ml-1" title="Back to projects" aria-label="Back to projects">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7"/></svg>
+        </button>
+        <span class="text-[11px] font-mono text-[var(--cx-muted)] tracking-wide" x-text="project.project.id"></span>
+        <div class="title-action-trigger flex items-center gap-2 min-w-0">
+          <h1 class="cx-page-title truncate" x-text="project.project.title"></h1>
+          <button x-show="!replay.active" @click="openRenameProject(project.project.id, project.project.title)"
+            class="title-action-button inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-[var(--cx-border)] text-[var(--cx-muted)] hover:border-[var(--cx-border-strong)] hover:bg-[var(--cx-hover)] hover:text-[var(--cx-text)] focus:outline-none"
+            title="Rename project"
+            :aria-label="`Rename ${project.project.title}`">
+            <svg class="h-3 w-3" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="m16.862 4.487 1.65-1.65a1.875 1.875 0 1 1 2.652 2.652l-9.193 9.193a4.5 4.5 0 0 1-1.897 1.13L6 17l1.188-4.074a4.5 4.5 0 0 1 1.13-1.897l8.544-8.542Z"/><path d="M19.5 7.125 16.875 4.5"/><path d="M5.25 18.75h13.5"/></svg>
+          </button>
+        </div>
+        <span class="cx-pill shrink-0" :class="projectStatusPillClass(project.project.status)">
+          <span class="cx-dot"></span>
+          <span x-text="project.project.status"></span>
+        </span>
+      </div>
+      <p class="cx-page-sub flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span x-text="`${project.facts.length} findings`"></span>
+        <span class="text-[var(--cx-border-strong)]" aria-hidden="true">·</span>
+        <span x-text="`${project.intents.length} intents`"></span>
+        <span class="text-[var(--cx-border-strong)]" aria-hidden="true">·</span>
+        <span x-text="`${projectOpenIntentCount()} open`"></span>
+        <span class="text-[var(--cx-border-strong)]" aria-hidden="true">·</span>
+        <span x-text="`Created ${formatShortDate(project.project.created_at)}`"></span>
+      </p>
     </div>
-    <div class="flex-1"></div>
-    <div class="flex items-center gap-4 text-xs text-slate-400">
-      <span x-text="`${project.facts.length} facts`"></span>
-      <span x-text="`${project.intents.length} intents`"></span>
-    </div>
-    <div class="flex items-center gap-1.5">
+    <div class="flex flex-wrap items-center gap-2 ml-auto">
+      <div class="cx-seg">
+        <button type="button" @click="setBoardMode(false)" :data-active="!boardMode ? 'true' : 'false'">Graph</button>
+        <button type="button" @click="setBoardMode(true)" :data-active="boardMode ? 'true' : 'false'">Board</button>
+      </div>
       <template x-if="!replay.active">
-        <button @click="startProjectReplay()" class="px-2.5 py-1 rounded-lg border border-violet-200 text-xs text-violet-600 hover:bg-violet-50 transition flex items-center gap-1.5">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7V5Z"/><path d="M4 5v14"/></svg>
+        <button type="button" @click="startProjectReplay()" class="cx-btn">
+          <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7V5Z"/><path d="M4 5v14"/></svg>
           Replay
         </button>
       </template>
       <template x-if="replay.active">
-        <div class="flex items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-50/80 px-2 py-1 text-xs text-violet-700">
+        <div class="flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50/80 px-2 py-1 text-xs text-violet-700">
           <span class="font-medium whitespace-nowrap" x-text="replayProgressLabel()"></span>
           <button @click="toggleProjectReplayPlayback()" class="inline-flex h-6 w-6 items-center justify-center rounded-md border border-violet-200 bg-white/80 hover:bg-white transition" :title="replay.playing ? 'Pause replay' : 'Resume replay'">
             <svg x-show="replay.playing" class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 6h3v12H8zM13 6h3v12h-3z"/></svg>
@@ -445,44 +1139,31 @@
           </button>
         </div>
       </template>
-      <button @click="viewProjectYaml(selectedProjectId, project.project.title)" class="px-2.5 py-1 rounded-lg border border-slate-200 text-xs text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition flex items-center gap-1.5">
-        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M14.25 3H7.5A2.25 2.25 0 0 0 5.25 5.25v13.5A2.25 2.25 0 0 0 7.5 21h9a2.25 2.25 0 0 0 2.25-2.25V8.25L14.25 3Z"/><path d="M14.25 3v5.25h4.5"/><path d="M8.25 12h7.5M8.25 15h5.25"/></svg>
+      <button type="button" @click="viewProjectYaml(selectedProjectId, project.project.title)" class="cx-btn">
+        <svg fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M14.25 3H7.5A2.25 2.25 0 0 0 5.25 5.25v13.5A2.25 2.25 0 0 0 7.5 21h9a2.25 2.25 0 0 0 2.25-2.25V8.25L14.25 3Z"/><path d="M14.25 3v5.25h4.5"/><path d="M8.25 12h7.5M8.25 15h5.25"/></svg>
         Snapshot
       </button>
       <template x-if="!replay.active && project.project.status !== 'completed'">
-        <button @click="toggleProjectStop()"
-          class="px-2.5 py-1 rounded-lg border text-xs transition flex items-center gap-1.5"
-          :class="project.project.status === 'active'
-            ? 'border-amber-200 text-amber-600 hover:bg-amber-50'
-            : 'border-teal-200 text-teal-600 hover:bg-teal-50'">
-          <svg x-show="project.project.status === 'active'" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
-          <svg x-show="project.project.status === 'stopped'" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7V5Z"/></svg>
+        <button type="button" @click="toggleProjectStop()" class="cx-btn" :class="project.project.status === 'active' ? 'cx-btn--amber' : ''">
+          <svg x-show="project.project.status === 'active'" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
+          <svg x-show="project.project.status === 'stopped'" fill="none" stroke="currentColor" stroke-width="1.9" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7V5Z"/></svg>
           <span x-text="project.project.status === 'active' ? 'Stop' : 'Resume'"></span>
         </button>
       </template>
       <template x-if="!replay.active && project.project.status === 'completed'">
-        <button @click="openReopenProject(project.project.id, project.project.title)"
-          class="px-2.5 py-1 rounded-lg border border-sky-200 text-xs text-sky-600 hover:bg-sky-50 transition flex items-center gap-1.5">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.708"/><path d="M3 3v6h6"/></svg>
+        <button type="button" @click="openReopenProject(project.project.id, project.project.title)" class="cx-btn">
+          <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.708"/><path d="M3 3v6h6"/></svg>
           Reopen
         </button>
       </template>
-      <button x-show="!replay.active" @click="deleteProject()" class="px-2.5 py-1 rounded-lg border border-rose-200 text-xs text-rose-500 hover:bg-rose-50 hover:text-rose-600 transition flex items-center gap-1.5">
-        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4.75A1.75 1.75 0 0 1 9.75 3h4.5A1.75 1.75 0 0 1 16 4.75V6"/><path d="M19 6l-.63 11.338A2 2 0 0 1 16.37 19.5H7.63a2 2 0 0 1-1.997-2.162L5 6"/><path d="M10 10.5v5"/><path d="M14 10.5v5"/></svg>
+      <button type="button" x-show="!replay.active" @click="deleteProject()" class="cx-btn cx-btn--danger">
+        <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4.75A1.75 1.75 0 0 1 9.75 3h4.5A1.75 1.75 0 0 1 16 4.75V6"/><path d="M19 6l-.63 11.338A2 2 0 0 1 16.37 19.5H7.63a2 2 0 0 1-1.997-2.162L5 6"/><path d="M10 10.5v5"/><path d="M14 10.5v5"/></svg>
         Delete
       </button>
     </div>
-    <div class="flex items-center gap-1.5 ml-1">
-      <button @click="showLocalPrefs = true" class="h-7 max-w-40 px-2.5 rounded-lg border border-slate-200 text-xs text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition inline-flex items-center shrink-0">
-        <span class="truncate block" x-text="actorName()"></span>
-      </button>
-      <button @click="loadSettings(); showSettings = true" class="h-7 w-7 rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition inline-flex items-center justify-center shrink-0">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7 7 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a7 7 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a7 7 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a7 7 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"/><path d="M15 12a3 3 0 1 1-6 0-3 3 0 0 1 6 0Z"/></svg>
-      </button>
-    </div>
-  </header>
+  </div>
 
-  <div class="flex-1 flex overflow-hidden" id="graphLayout">
+  <div x-show="!boardMode" class="flex-1 flex overflow-hidden" id="graphLayout">
     <!-- Graph -->
     <div class="flex-1 relative min-w-0">
       <div class="absolute top-3 left-3 z-10 flex items-center gap-1.5">
@@ -502,7 +1183,7 @@
 
       <template x-if="project.project.reason">
         <div class="absolute top-14 right-3 z-10 max-w-80">
-          <div class="reason-panel-running relative overflow-hidden rounded-2xl border border-sky-200/80 bg-white/92 px-3.5 py-3 shadow-lg shadow-sky-100/60 backdrop-blur">
+          <div class="reason-panel-running relative overflow-hidden rounded-xl border border-sky-200/80 bg-white/92 px-3.5 py-3 shadow-lg shadow-sky-100/60 backdrop-blur">
             <div class="flex items-start gap-3">
               <span class="reason-beacon mt-1 shrink-0"></span>
               <div class="min-w-0">
@@ -574,22 +1255,19 @@
     </div>
 
     <!-- Side panel -->
-    <div class="border-l border-slate-200/60 bg-white flex flex-col overflow-hidden shrink-0 relative z-20" :style="{ width: sidePanelWidth + 'px', minWidth: sidePanelWidth + 'px', flexBasis: sidePanelWidth + 'px' }">
-      <div class="flex border-b border-slate-100 shrink-0">
-        <button @click="sideTab = 'detail'" class="flex-1 px-3 py-2.5 text-xs font-medium transition"
-          :class="sideTab === 'detail' ? 'text-brand-600 border-b-2 border-brand-500' : 'text-slate-400 hover:text-slate-600'">Detail</button>
-        <button @click="sideTab = 'hints'" class="flex-1 px-3 py-2.5 text-xs font-medium transition"
-          :class="sideTab === 'hints' ? 'text-brand-600 border-b-2 border-brand-500' : 'text-slate-400 hover:text-slate-600'">
-          Hints <span class="ml-0.5 text-[10px] opacity-60" x-text="project.hints.length"></span>
+    <div id="detailPanel" tabindex="-1" role="region" aria-label="Detail panel" class="border-l border-slate-200/60 bg-white flex flex-col overflow-hidden shrink-0 relative z-20 outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-inset" :style="{ width: sidePanelWidth + 'px', minWidth: sidePanelWidth + 'px', flexBasis: sidePanelWidth + 'px' }">
+      <div class="cx-tabs">
+        <button type="button" @click="sideTab = 'detail'" class="cx-tab" :data-active="sideTab === 'detail' ? 'true' : 'false'">Detail</button>
+        <button type="button" @click="sideTab = 'hints'" class="cx-tab" :data-active="sideTab === 'hints' ? 'true' : 'false'">
+          Hints <span class="cx-tab-count" x-text="project.hints.length"></span>
         </button>
-        <button @click="sideTab = 'log'" class="flex-1 px-3 py-2.5 text-xs font-medium transition"
-          :class="sideTab === 'log' ? 'text-brand-600 border-b-2 border-brand-500' : 'text-slate-400 hover:text-slate-600'">Log</button>
+        <button type="button" @click="sideTab = 'log'" class="cx-tab" :data-active="sideTab === 'log' ? 'true' : 'false'">Log</button>
       </div>
 
       <!-- Detail -->
       <div x-show="sideTab === 'detail'" class="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/40">
         <template x-if="!selectedNode">
-          <div class="rounded-2xl border border-dashed border-slate-200 bg-white/80 px-5 py-10 text-center shadow-sm">
+          <div class="rounded-xl border border-dashed border-slate-200 bg-white/80 px-5 py-10 text-center shadow-sm">
             <p class="text-sm text-slate-400">Click a node or edge</p>
             <p class="text-xs text-slate-300 mt-1">Shift+click for multi-select</p>
           </div>
@@ -597,7 +1275,7 @@
         <template x-if="selectedNode && selectedNode.type === 'fact' && selectedFacts.length > 1">
           <div class="space-y-3">
             <template x-for="fact in selectedFactRecords()" :key="fact.id">
-              <article class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+              <article class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
                 <div class="px-4 py-3 border-b border-slate-100 bg-slate-50/80">
                   <div class="flex items-center justify-between gap-3">
                     <div class="flex items-center gap-2 min-w-0">
@@ -632,7 +1310,7 @@
           </div>
         </template>
         <template x-if="selectedNode && selectedNode.type === 'fact' && selectedFactRecord() && selectedFacts.length <= 1">
-          <section class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <section class="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
             <div class="px-4 py-3 border-b border-slate-100 bg-slate-50/80">
               <div class="flex items-center gap-2">
                 <span class="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold"
@@ -681,7 +1359,7 @@
           </section>
         </template>
         <template x-if="selectedNode && selectedNode.type === 'intent' && selectedIntentRecord()">
-          <section class="rounded-2xl border border-violet-200/80 bg-white shadow-sm overflow-hidden">
+          <section class="rounded-xl border border-violet-200/80 bg-white shadow-sm overflow-hidden">
             <div class="px-4 py-3 border-b border-violet-100 bg-violet-50/70">
               <div class="flex items-center gap-2">
                 <span class="px-2 py-0.5 rounded-md bg-violet-100 text-violet-700 text-[10px] font-mono font-bold" x-text="selectedIntentId()"></span>
@@ -709,13 +1387,13 @@
       <!-- Hints -->
       <div x-show="sideTab === 'hints'" class="flex-1 overflow-y-auto p-4 space-y-3 bg-amber-50/25">
         <template x-if="project.hints.length === 0">
-          <div class="rounded-2xl border border-dashed border-amber-200 bg-white/80 px-5 py-10 text-center shadow-sm">
+          <div class="rounded-xl border border-dashed border-amber-200 bg-white/80 px-5 py-10 text-center shadow-sm">
             <p class="text-sm text-slate-300">No hints yet</p>
           </div>
         </template>
         <template x-for="h in project.hints" :key="h.id">
           <button type="button" @click="openHintTimelineEntry(h.id)"
-            class="w-full text-left rounded-2xl border border-amber-200/80 bg-white shadow-sm overflow-hidden transition hover:bg-amber-50/40">
+            class="w-full text-left rounded-xl border border-amber-200/80 bg-white shadow-sm overflow-hidden transition hover:bg-amber-50/40">
             <div class="px-4 py-3 border-b border-amber-100 bg-amber-50/80">
               <div class="flex items-center justify-between gap-3 text-[11px]">
                 <div class="flex items-center gap-2 min-w-0">
@@ -735,7 +1413,7 @@
       <!-- Log -->
       <div x-show="sideTab === 'log'" class="flex-1 overflow-y-auto p-4 space-y-3">
         <template x-if="selectedTimelineSummary()">
-          <section class="sticky top-0 z-10 rounded-2xl border border-slate-200 bg-white/95 backdrop-blur px-4 py-3 shadow-sm">
+          <section class="sticky top-0 z-10 rounded-xl border border-slate-200 bg-white/95 backdrop-blur px-4 py-3 shadow-sm">
             <div class="space-y-2.5">
               <div class="space-y-1">
                 <div class="flex items-center justify-between gap-3 text-[11px]">
@@ -788,14 +1466,156 @@
       </div>
     </div>
   </div>
-</div>
+
+  <!-- ═══════════ BOARD VIEW ═══════════ -->
+  <div x-show="boardMode" x-cloak class="cx-board-scroll">
+    <div class="cx-board-page">
+      <div class="mx-auto max-w-[1600px] space-y-4">
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="relative min-w-[240px] flex-1 max-w-md">
+            <svg class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--cx-muted)]" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m16.5 16.5 3 3"/></svg>
+            <input x-model="boardFilter" type="search" aria-label="Filter findings and intents" placeholder="Filter findings and intents…" class="cx-input w-full" style="padding-left:34px">
+          </div>
+          <div class="cx-meta flex flex-wrap items-center gap-3">
+            <span class="inline-flex items-center gap-1.5"><span class="h-1.5 w-1.5 rounded-full bg-brand-500"></span><span x-text="`${boardFacts().length} findings`"></span></span>
+            <span class="inline-flex items-center gap-1.5"><span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span><span x-text="`${boardOpenIntents().length} open intents`"></span></span>
+            <span class="inline-flex items-center gap-1.5"><span class="h-1.5 w-1.5 rounded-full bg-teal-500"></span><span x-text="`${boardConcludedIntents().length} concluded`"></span></span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 items-start gap-4 xl:grid-cols-3">
+          <section class="cx-card">
+            <header class="cx-card-head">
+              <div class="flex items-center gap-2">
+                <span class="h-1.5 w-1.5 rounded-full bg-brand-500"></span>
+                <h3 class="cx-card-title">Findings</h3>
+              </div>
+              <span class="cx-meta tabular-nums" x-text="boardFacts().length"></span>
+            </header>
+            <div class="space-y-2 p-2">
+              <template x-for="fact in boardFacts()" :key="fact.id">
+                <article @click="openBoardFact(fact.id)" @keydown.enter.prevent="openBoardFact(fact.id)" @keydown.space.prevent="openBoardFact(fact.id)" role="button" tabindex="0" class="board-card cx-board-card group cursor-pointer border-l-brand-400" title="Open in graph">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="rounded font-mono px-1.5 py-0.5 text-[11px] font-semibold"
+                      :class="fact.id === 'origin' ? 'bg-teal-50 text-teal-700' : fact.id === 'goal' ? 'bg-rose-50 text-rose-600' : 'bg-brand-50 text-brand-700'"
+                      x-text="fact.id"></span>
+                    <span class="text-[10px] text-[var(--cx-muted)] opacity-0 transition group-hover:opacity-100">Open ↗</span>
+                  </div>
+                  <p class="board-clamp mt-2 whitespace-pre-wrap break-words text-[13px] leading-relaxed text-[var(--cx-text-2)]" x-text="fact.description"></p>
+                  <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[var(--cx-muted)]">
+                    <template x-if="fact.id === 'origin'"><span>Project starting point</span></template>
+                    <template x-if="fact.id === 'goal'"><span>Project target</span></template>
+                    <template x-if="fact.id !== 'origin' && fact.id !== 'goal' && getProducingIntent(fact.id)">
+                      <span x-text="`Produced by ${getProducingIntent(fact.id).id}`"></span>
+                    </template>
+                  </div>
+                </article>
+              </template>
+              <template x-if="boardFacts().length === 0">
+                <p class="px-2 py-8 text-center text-xs text-[var(--cx-muted)]" x-text="boardFilter ? 'No findings match.' : 'No findings yet.'"></p>
+              </template>
+            </div>
+          </section>
+
+          <section class="cx-card">
+            <header class="cx-card-head">
+              <div class="flex items-center gap-2">
+                <span class="h-1.5 w-1.5 rounded-full bg-amber-500"></span>
+                <h3 class="cx-card-title">Open intents</h3>
+              </div>
+              <span class="cx-meta tabular-nums" x-text="boardOpenIntents().length"></span>
+            </header>
+            <div class="space-y-2 p-2">
+              <template x-for="intent in boardOpenIntents()" :key="intent.id">
+                <article @click="openBoardIntent(intent.id)" @keydown.enter.prevent="openBoardIntent(intent.id)" @keydown.space.prevent="openBoardIntent(intent.id)" role="button" tabindex="0" class="board-card cx-board-card group cursor-pointer border-l-amber-400" title="Open in graph">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="font-mono text-[11px] font-semibold text-violet-600" x-text="intent.id"></span>
+                    <span class="rounded-full px-1.5 py-0.5 text-[10px] font-medium" :class="intentStatusClass(intent)" x-text="intentStatusLabel(intent)"></span>
+                  </div>
+                  <p class="board-clamp mt-2 whitespace-pre-wrap break-words text-[13px] leading-relaxed text-[var(--cx-text-2)]" x-text="intent.description"></p>
+                  <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[var(--cx-muted)]">
+                    <span x-text="`From ${(intent.from || []).join(', ') || '—'}`"></span>
+                    <span x-text="intent.worker || 'unclaimed'"></span>
+                    <span x-text="formatTime(intent.created_at)"></span>
+                  </div>
+                </article>
+              </template>
+              <template x-if="boardOpenIntents().length === 0">
+                <p class="px-2 py-8 text-center text-xs text-[var(--cx-muted)]" x-text="boardFilter ? 'No open intents match.' : 'No open intents.'"></p>
+              </template>
+            </div>
+          </section>
+
+          <section class="cx-card">
+            <header class="cx-card-head">
+              <div class="flex items-center gap-2">
+                <span class="h-1.5 w-1.5 rounded-full bg-teal-500"></span>
+                <h3 class="cx-card-title">Concluded</h3>
+              </div>
+              <span class="cx-meta tabular-nums" x-text="boardConcludedIntents().length"></span>
+            </header>
+            <div class="space-y-2 p-2">
+              <template x-for="intent in boardConcludedIntents()" :key="intent.id">
+                <article @click="openBoardIntent(intent.id)" @keydown.enter.prevent="openBoardIntent(intent.id)" @keydown.space.prevent="openBoardIntent(intent.id)" role="button" tabindex="0" class="board-card cx-board-card group cursor-pointer border-l-teal-400" title="Open in graph">
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="font-mono text-[11px] font-semibold text-violet-600" x-text="intent.id"></span>
+                    <span class="rounded-full px-1.5 py-0.5 text-[10px] font-medium" :class="intentStatusClass(intent)" x-text="intentStatusLabel(intent)"></span>
+                  </div>
+                  <p class="board-clamp mt-2 whitespace-pre-wrap break-words text-[13px] leading-relaxed text-[var(--cx-text-2)]" x-text="intent.description"></p>
+                  <div class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[var(--cx-muted)]">
+                    <span x-text="`To ${intent.to || '—'}`"></span>
+                    <span x-text="intent.worker || '—'"></span>
+                    <span x-text="formatTime(intent.concluded_at)"></span>
+                  </div>
+                </article>
+              </template>
+              <template x-if="boardConcludedIntents().length === 0">
+                <p class="px-2 py-8 text-center text-xs text-[var(--cx-muted)]" x-text="boardFilter ? 'No concluded intents match.' : 'No concluded intents yet.'"></p>
+              </template>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </div>
 </template>
+
+    </div><!-- /cx-content -->
+  </div><!-- /cx-main -->
+</div><!-- /cx-shell -->
+
+<!-- ═══════════ COMMAND PALETTE ═══════════ -->
+<div x-show="searchOpen" x-cloak class="fixed inset-0 z-[60] overlay flex items-start justify-center" @click.self="closeSearch()" @keydown.escape.window="closeSearch()">
+  <div class="cx-palette" @click.stop>
+    <div class="cx-palette-row">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m16.5 16.5 3.5 3.5"/></svg>
+      <input x-ref="searchInput" x-model="searchQuery" type="text" placeholder="Search projects and pages…" @input="searchIndex = 0" @keydown.down.prevent="searchIndex = Math.min(searchIndex + 1, Math.max(0, searchResults().length - 1))" @keydown.up.prevent="searchIndex = Math.max(searchIndex - 1, 0)" @keydown.enter.prevent="searchChooseFirst()" @keydown.escape.prevent="closeSearch()" aria-label="Search projects and pages">
+      <span class="cx-kbd">ESC</span>
+    </div>
+    <div class="max-h-80 overflow-y-auto p-2">
+      <template x-for="item in searchResults()" :key="item.key">
+        <button type="button" class="cx-palette-item" :data-active="searchIndex === item.index ? 'true' : 'false'" @click="searchSelect(item)" @mouseenter="searchIndex = item.index">
+          <svg x-show="item.type === 'project'" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M3.5 7.5A1.5 1.5 0 0 1 5 6h4l2 2.5h8a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 19 19.5H5A1.5 1.5 0 0 1 3.5 18V7.5Z"/></svg>
+          <svg x-show="item.type !== 'project'" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg>
+          <span x-text="item.label"></span>
+          <span class="cx-palette-hint" x-text="item.hint"></span>
+        </button>
+      </template>
+      <p x-show="searchResults().length === 0" class="px-3 py-6 text-center cx-meta">No matches</p>
+    </div>
+    <div class="cx-palette-foot">
+      <span>↑↓ navigate</span>
+      <span>↵ open</span>
+      <span class="ml-auto" x-text="`${projects.length} project${projects.length === 1 ? '' : 's'}`"></span>
+    </div>
+  </div>
+</div>
 
 <!-- ═══════════ MODALS ═══════════ -->
 
 <!-- New Project -->
 <div x-show="showNewProject" x-cloak class="fixed inset-0 z-50 flex items-center justify-center overlay" @click.self="showNewProject = false">
-  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 border border-slate-200/60" @click.stop>
+  <div class="cx-dialog w-full max-w-lg p-6" @click.stop>
     <h3 class="text-base font-semibold text-slate-700 mb-4">New Project</h3>
     <div class="space-y-3">
       <input x-model="newProject.title" placeholder="Project title" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400 transition placeholder:text-slate-300">
@@ -821,16 +1641,16 @@
       </div>
     </div>
     <div class="flex justify-end gap-2 mt-5">
-      <button @click="showNewProject = false" class="px-4 py-2 text-sm text-slate-500 hover:bg-slate-50 rounded-xl transition">Cancel</button>
+      <button @click="showNewProject = false" class="cx-btn">Cancel</button>
       <button @click="createProject()" :disabled="!newProject.title || !newProject.origin || !newProject.goal"
-        class="px-5 py-2 text-sm bg-brand-500 text-white rounded-xl font-medium hover:bg-brand-600 transition disabled:opacity-30 shadow-sm shadow-brand-200">Create</button>
+        class="cx-btn cx-btn--primary">Create</button>
     </div>
   </div>
 </div>
 
 <!-- Create Intent -->
 <div x-show="showIntentModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center overlay" @click.self="showIntentModal = false">
-  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 border border-slate-200/60" @click.stop>
+  <div class="cx-dialog w-full max-w-lg p-6" @click.stop>
     <h3 class="text-base font-semibold text-slate-700 mb-1">New Intent</h3>
     <div class="mb-4">
       <label class="text-[11px] text-slate-400 mb-1 block font-medium">From facts</label>
@@ -847,18 +1667,18 @@
       </div>
     </div>
     <div class="flex justify-end gap-2 mt-5">
-      <button @click="showIntentModal = false" class="px-4 py-2 text-sm text-slate-500 hover:bg-slate-50 rounded-xl transition">Cancel</button>
+      <button @click="showIntentModal = false" class="cx-btn">Cancel</button>
       <button @click="createIntent(false)" :disabled="!intentForm.description"
-        class="px-5 py-2 text-sm border border-slate-200 text-slate-600 rounded-xl font-medium hover:bg-slate-50 transition disabled:opacity-30">Declare</button>
+        class="cx-btn">Declare</button>
       <button @click="createIntent(true)" :disabled="!intentForm.description"
-        class="px-5 py-2 text-sm bg-brand-500 text-white rounded-xl font-medium hover:bg-brand-600 transition disabled:opacity-30 shadow-sm shadow-brand-200">Declare &amp; Claim</button>
+        class="cx-btn cx-btn--primary">Declare &amp; Claim</button>
     </div>
   </div>
 </div>
 
 <!-- Conclude -->
 <div x-show="showConcludeModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center overlay" @click.self="showConcludeModal = false">
-  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 border border-slate-200/60" @click.stop>
+  <div class="cx-dialog w-full max-w-lg p-6" @click.stop>
     <h3 class="text-base font-semibold text-slate-700 mb-1">Conclude Intent</h3>
     <p class="text-xs text-slate-400 mb-4 font-mono" x-text="concludeForm.intentId"></p>
     <div class="space-y-3">
@@ -868,16 +1688,16 @@
       </div>
     </div>
     <div class="flex justify-end gap-2 mt-5">
-      <button @click="showConcludeModal = false" class="px-4 py-2 text-sm text-slate-500 hover:bg-slate-50 rounded-xl transition">Cancel</button>
+      <button @click="showConcludeModal = false" class="cx-btn">Cancel</button>
       <button @click="concludeIntent()" :disabled="!concludeForm.description"
-        class="px-5 py-2 text-sm bg-teal-500 text-white rounded-xl font-medium hover:bg-teal-600 transition disabled:opacity-30 shadow-sm shadow-teal-200">Conclude</button>
+        class="cx-btn cx-btn--primary">Conclude</button>
     </div>
   </div>
 </div>
 
 <!-- Complete Project -->
 <div x-show="showCompleteModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center overlay" @click.self="showCompleteModal = false">
-  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 border border-slate-200/60" @click.stop>
+  <div class="cx-dialog w-full max-w-lg p-6" @click.stop>
     <h3 class="text-base font-semibold text-slate-700 mb-1">Complete Project</h3>
     <p class="text-xs text-slate-400 mb-4">Mark project as completed</p>
     <div class="space-y-3">
@@ -895,16 +1715,16 @@
       </div>
     </div>
     <div class="flex justify-end gap-2 mt-5">
-      <button @click="showCompleteModal = false" class="px-4 py-2 text-sm text-slate-500 hover:bg-slate-50 rounded-xl transition">Cancel</button>
+      <button @click="showCompleteModal = false" class="cx-btn">Cancel</button>
       <button @click="completeProject()" :disabled="selectedFacts.length === 0 || !completeForm.description"
-        class="px-5 py-2 text-sm bg-teal-500 text-white rounded-xl font-medium hover:bg-teal-600 transition disabled:opacity-30 shadow-sm shadow-teal-200">Complete</button>
+        class="cx-btn cx-btn--primary">Complete</button>
     </div>
   </div>
 </div>
 
 <!-- Hint -->
 <div x-show="showHintModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center overlay" @click.self="showHintModal = false">
-  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 border border-slate-200/60" @click.stop>
+  <div class="cx-dialog w-full max-w-lg p-6" @click.stop>
     <h3 class="text-base font-semibold text-slate-700 mb-4">Add Hint</h3>
     <div class="space-y-3">
       <textarea x-model="hintForm.content" placeholder="Strategy advice or note..." rows="3" class="w-full px-3 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-100 focus:border-brand-400 transition placeholder:text-slate-300"></textarea>
@@ -913,16 +1733,16 @@
       </div>
     </div>
     <div class="flex justify-end gap-2 mt-5">
-      <button @click="showHintModal = false" class="px-4 py-2 text-sm text-slate-500 hover:bg-slate-50 rounded-xl transition">Cancel</button>
+      <button @click="showHintModal = false" class="cx-btn">Cancel</button>
       <button @click="addHint()" :disabled="!hintForm.content"
-        class="px-5 py-2 text-sm bg-amber-500 text-white rounded-xl font-medium hover:bg-amber-600 transition disabled:opacity-30 shadow-sm shadow-amber-200">Add</button>
+        class="cx-btn cx-btn--primary">Add</button>
     </div>
 </div>
 </div>
 
 <!-- Reopen -->
 <div x-show="showReopenModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center overlay" @click.self="showReopenModal = false">
-  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 border border-slate-200/60" @click.stop>
+  <div class="cx-dialog w-full max-w-lg p-6" @click.stop>
     <h3 class="text-base font-semibold text-slate-700 mb-1">Reopen Project</h3>
     <p class="text-xs text-slate-400 mb-4" x-text="projectLabel(reopenForm.projectId, reopenForm.projectTitle)"></p>
     <div class="space-y-3">
@@ -932,16 +1752,16 @@
       </div>
     </div>
     <div class="flex justify-end gap-2 mt-5">
-      <button @click="showReopenModal = false" class="px-4 py-2 text-sm text-slate-500 hover:bg-slate-50 rounded-xl transition">Cancel</button>
+      <button @click="showReopenModal = false" class="cx-btn">Cancel</button>
       <button @click="reopenProject()" :disabled="!reopenForm.projectId || !reopenForm.description"
-        class="px-5 py-2 text-sm bg-sky-500 text-white rounded-xl font-medium hover:bg-sky-600 transition disabled:opacity-30 shadow-sm shadow-sky-200">Reopen</button>
+        class="cx-btn">Reopen</button>
     </div>
   </div>
 </div>
 
 <!-- Rename Project -->
 <div x-show="showRenameModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center overlay" @click.self="showRenameModal = false">
-  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 border border-slate-200/60" @click.stop>
+  <div class="cx-dialog w-full max-w-lg p-6" @click.stop>
     <h3 class="text-base font-semibold text-slate-700 mb-1">Rename Project</h3>
     <p class="text-xs text-slate-400 mb-4" x-text="projectLabel(renameForm.projectId, renameForm.originalTitle)"></p>
     <div class="space-y-3">
@@ -949,16 +1769,16 @@
       <p class="text-[11px] text-slate-400">This only changes the project title and is allowed in any project status.</p>
     </div>
     <div class="flex justify-end gap-2 mt-5">
-      <button @click="showRenameModal = false" class="px-4 py-2 text-sm text-slate-500 hover:bg-slate-50 rounded-xl transition">Cancel</button>
+      <button @click="showRenameModal = false" class="cx-btn">Cancel</button>
       <button @click="renameProject()" :disabled="!renameForm.projectId || !renameForm.title"
-        class="px-5 py-2 text-sm bg-slate-800 text-white rounded-xl font-medium hover:bg-slate-900 transition disabled:opacity-30 shadow-sm">Save</button>
+        class="cx-btn cx-btn--primary">Save</button>
     </div>
   </div>
 </div>
 
 <!-- Local Preferences -->
 <div x-show="showLocalPrefs" x-cloak class="fixed inset-0 z-50 flex items-center justify-center overlay" @click.self="showLocalPrefs = false">
-  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 border border-slate-200/60" @click.stop>
+  <div class="cx-dialog w-full max-w-md p-6" @click.stop>
     <h3 class="text-base font-semibold text-slate-700 mb-4">Local Preferences</h3>
     <div class="space-y-4">
       <div>
@@ -979,15 +1799,15 @@
       <p class="text-[11px] text-slate-400">Stored only in this browser.</p>
     </div>
     <div class="flex justify-end gap-2 mt-5">
-      <button @click="showLocalPrefs = false" class="px-4 py-2 text-sm text-slate-500 hover:bg-slate-50 rounded-xl transition">Close</button>
-      <button @click="saveLocalSettings()" class="px-4 py-2 text-sm bg-slate-800 text-white rounded-xl font-medium hover:bg-slate-900 transition shadow-sm">Save Local</button>
+      <button @click="showLocalPrefs = false" class="cx-btn">Close</button>
+      <button @click="saveLocalSettings()" class="cx-btn cx-btn--primary">Save Local</button>
     </div>
   </div>
 </div>
 
 <!-- Settings -->
 <div x-show="showSettings" x-cloak class="fixed inset-0 z-50 flex items-center justify-center overlay" @click.self="showSettings = false">
-  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 border border-slate-200/60" @click.stop>
+  <div class="cx-dialog w-full max-w-sm p-6" @click.stop>
     <h3 class="text-base font-semibold text-slate-700 mb-4">Server Settings</h3>
     <div>
       <label class="text-[11px] text-slate-400 mb-1 block font-medium">Intent timeout (seconds)</label>
@@ -999,15 +1819,15 @@
       <p class="text-[11px] text-slate-400 mt-2">Shared backend configuration.</p>
     </div>
     <div class="flex justify-end gap-2 mt-5">
-      <button @click="showSettings = false" class="px-4 py-2 text-sm text-slate-500 hover:bg-slate-50 rounded-xl transition">Close</button>
-      <button @click="saveServerSettings()" class="px-4 py-2 text-sm bg-brand-500 text-white rounded-xl font-medium hover:bg-brand-600 transition shadow-sm shadow-brand-200">Save Server</button>
+      <button @click="showSettings = false" class="cx-btn">Close</button>
+      <button @click="saveServerSettings()" class="cx-btn cx-btn--primary">Save Server</button>
     </div>
   </div>
 </div>
 
 <!-- Export Preview -->
 <div x-show="showYamlModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center overlay" @click.self="showYamlModal = false">
-  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl mx-4 border border-slate-200/60 overflow-hidden" @click.stop>
+  <div class="cx-dialog w-full max-w-4xl mx-4 overflow-hidden" @click.stop>
     <div class="px-5 py-4 border-b border-slate-200/80 flex items-center justify-between gap-4">
       <div class="min-w-0 flex items-center gap-3">
         <div class="flex rounded-lg border border-slate-200 overflow-hidden shrink-0">
@@ -1019,8 +1839,8 @@
         <p class="text-xs text-slate-400 truncate" x-text="yamlPreviewTitle"></p>
       </div>
       <div class="flex items-center gap-2">
-        <button @click="copyYamlPreview()" class="px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-50 rounded-xl transition">Copy</button>
-        <button @click="showYamlModal = false" class="px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-50 rounded-xl transition">Close</button>
+        <button @click="copyYamlPreview()" class="cx-btn">Copy</button>
+        <button @click="showYamlModal = false" class="cx-btn">Close</button>
       </div>
     </div>
     <div class="max-h-[75vh] overflow-auto bg-slate-50 p-4">
@@ -1033,9 +1853,9 @@
 
 <!-- Delete Project -->
 <div x-show="showDeleteModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center overlay" @click.self="closeDeleteModal()">
-  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 border border-slate-200/60" @click.stop>
+  <div class="cx-dialog w-full max-w-md p-6" @click.stop>
     <div class="flex items-start gap-3">
-      <div class="w-10 h-10 rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center shrink-0">
+      <div class="w-10 h-10 rounded-xl bg-rose-50 text-rose-500 flex items-center justify-center shrink-0">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4.75A1.75 1.75 0 0 1 9.75 3h4.5A1.75 1.75 0 0 1 16 4.75V6"/><path d="M19 6l-.63 11.338A2 2 0 0 1 16.37 19.5H7.63a2 2 0 0 1-1.997-2.162L5 6"/><path d="M10 10.5v5"/><path d="M14 10.5v5"/></svg>
       </div>
       <div class="min-w-0 flex-1">
@@ -1048,8 +1868,8 @@
       </div>
     </div>
     <div class="flex justify-end gap-2 mt-6">
-      <button @click="closeDeleteModal()" :disabled="isDeletingProject" class="px-4 py-2 text-sm text-slate-500 hover:bg-slate-50 rounded-xl transition disabled:opacity-40 disabled:cursor-not-allowed">Cancel</button>
-      <button @click="confirmDeleteProject()" :disabled="isDeletingProject" class="px-4 py-2 text-sm bg-rose-500 text-white rounded-xl font-medium hover:bg-rose-600 transition shadow-sm shadow-rose-200 disabled:opacity-40 disabled:cursor-not-allowed">
+      <button @click="closeDeleteModal()" :disabled="isDeletingProject" class="cx-btn disabled:cursor-not-allowed">Cancel</button>
+      <button @click="confirmDeleteProject()" :disabled="isDeletingProject" class="cx-btn cx-btn--danger-solid">
         <span x-text="isDeletingProject ? 'Deleting...' : 'Delete'"></span>
       </button>
     </div>
@@ -1072,10 +1892,23 @@
 <script>
 function cairnApp() {
   return {
-    view: 'list',
+    view: 'dashboard',
+    theme: 'light',
+    sidebarCollapsed: false,
+    navTip: { show: false, text: '', top: 0 },
+    dashboardLoading: true,
+    dashboardDetails: {},
+    dashboardDetailsAt: 0,
+    searchOpen: false,
+    searchQuery: '',
+    searchIndex: 0,
+    _dashboardTick: 0,
+    boardMode: false,
+    boardFilter: '',
     projects: [],
     project: null,
     selectedProjectId: '',
+    lastProjectId: '',
     polling: true,
     pollTimer: null,
     cy: null,
@@ -1129,6 +1962,9 @@ function cairnApp() {
     _timelineEventsCacheProject: null,
     _timelineEventsCache: [],
     _centerAnimation: null,
+    _autoFitTimer: null,
+    _suppressAutoFitUntil: 0,
+    _graphFocused: false,
     projectListScrollTop: 0,
     shouldRestoreProjectListScroll: false,
     isStoppingAllProjects: false,
@@ -1138,12 +1974,380 @@ function cairnApp() {
       this._panelResizeStop = () => this.stopPanelResize();
       window.addEventListener('pointermove', this._panelResizeMove);
       window.addEventListener('pointerup', this._panelResizeStop);
+      this._searchKeyHandler = (e) => {
+        if ((e.metaKey || e.ctrlKey) && String(e.key).toLowerCase() === 'k') {
+          e.preventDefault();
+          if (this.searchOpen) this.closeSearch(); else this.openSearch();
+        }
+      };
+      window.addEventListener('keydown', this._searchKeyHandler);
+      this.initTheme();
+      this.initSidebar();
+      try { this.boardMode = localStorage.getItem('cairn-board') === '1'; } catch {}
       this.loadLocalPrefs();
+      try { this.lastProjectId = localStorage.getItem('cairn-last-project') || ''; } catch {}
       await this.loadProjects();
+      if (!this.projects.some(p => p.id === this.lastProjectId)) this.lastProjectId = '';
       await this.loadSettings();
       this.startPolling();
       window.addEventListener('hashchange', () => this.handleRoute());
       this.handleRoute();
+      if (!location.hash || location.hash === '#/') {
+        this.loadDashboardDetails();
+      }
+    },
+
+    initSidebar() {
+      try { this.sidebarCollapsed = localStorage.getItem('cairn-sidebar-collapsed') === '1'; } catch {}
+    },
+
+    showNavTip(event, text) {
+      if (!this.sidebarCollapsed) return;
+      const rect = event.currentTarget.getBoundingClientRect();
+      this.navTip = { show: true, text, top: Math.round(rect.top + rect.height / 2) };
+    },
+
+    hideNavTip() {
+      this.navTip.show = false;
+    },
+
+    toggleSidebar() {
+      this.sidebarCollapsed = !this.sidebarCollapsed;
+      try { localStorage.setItem('cairn-sidebar-collapsed', this.sidebarCollapsed ? '1' : '0'); } catch {}
+      if (this.cy) this.$nextTick(() => { try { this.cy.resize(); } catch (e) {} });
+    },
+
+    goDashboard(fromRoute = false) {
+      if (this.view === 'dashboard') {
+        if (!fromRoute) this.refreshDashboard();
+        return;
+      }
+      this.exitGraphState();
+      this.view = 'dashboard';
+      this.project = null;
+      this.selectedProjectId = '';
+      this.selectedNode = null;
+      this.selectedFacts = [];
+      this.selectedTimelineEntryId = null;
+      if (!fromRoute && location.hash !== '#/') location.hash = '/';
+      this.loadDashboardDetails();
+      this.polling = true;
+    },
+
+    goProjects() {
+      if (this.view === 'list') return;
+      this.backToList();
+    },
+
+    goGraph() {
+      const id = this.selectedProjectId
+        || (this.projects.some(p => p.id === this.lastProjectId) ? this.lastProjectId : '')
+        || this.projects[0]?.id;
+      if (!id) {
+        this.showToast('No projects yet — create one to open the graph');
+        return;
+      }
+      if (this.view === 'graph' && this.selectedProjectId === id) return;
+      this.openProject(id);
+    },
+
+    exitGraphState() {
+      if (this.replay.active) {
+        this.stopReplayTimer();
+        this.replay.active = false;
+        this.replay.playing = false;
+        this.replay.frames = [];
+        this.replay.visibleEvents = [];
+        this.replay.frameIndex = -1;
+        this.replay.sourceProject = null;
+        this._timelineEventsCacheProject = null;
+        this._timelineEventsCache = [];
+      }
+      this.selectedNode = null;
+      this.selectedFacts = [];
+      this.selectedTimelineEntryId = null;
+      this.teardownAutoFit();
+      if (this.cy) { this.cy.destroy(); this.cy = null; }
+    },
+
+    async loadDashboardDetails(force = false) {
+      if (this.dashboardLoading === false && !force && Date.now() - this.dashboardDetailsAt < 4000) return;
+      const alive = new Set(this.projects.map(p => p.id));
+      for (const id of Object.keys(this.dashboardDetails)) {
+        if (!alive.has(id)) delete this.dashboardDetails[id];
+      }
+      if (Object.keys(this.dashboardDetails).length === 0) this.dashboardLoading = true;
+      try {
+        const results = await Promise.allSettled(this.projects.map(p =>
+          force || !this.dashboardDetails[p.id]
+            ? this.api('GET', `/projects/${p.id}`).then(d => ({ id: p.id, detail: d }))
+            : Promise.resolve({ id: p.id, detail: this.dashboardDetails[p.id] })
+        ));
+        for (const result of results) {
+          if (result.status === 'fulfilled' && result.value?.detail) {
+            this.dashboardDetails[result.value.id] = result.value.detail;
+          }
+        }
+        this.dashboardDetailsAt = Date.now();
+      } finally {
+        this.dashboardLoading = false;
+      }
+    },
+
+    refreshDashboard() {
+      this.dashboardDetailsAt = 0;
+      return Promise.all([this.loadProjects(), this.loadDashboardDetails(true)]);
+    },
+
+    dashboardStats() {
+      let facts = 0, intents = 0, working = 0, unclaimed = 0;
+      for (const p of this.projects) {
+        facts += Number(p.fact_count) || 0;
+        intents += Number(p.intent_count) || 0;
+        working += Number(p.working_intent_count) || 0;
+        unclaimed += Number(p.unclaimed_intent_count) || 0;
+      }
+      const open = working + unclaimed;
+      return { facts, intents, working, unclaimed, open, concluded: Math.max(0, intents - open) };
+    },
+
+    dashboardProjects() {
+      return [...this.projects]
+        .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+        .slice(0, 6);
+    },
+
+    dashboardFindings(limit = 6) {
+      const derived = [];
+      const setup = [];
+      for (const p of this.projects) {
+        const detail = this.dashboardDetails[p.id];
+        if (!detail) continue;
+        const producedAt = {};
+        for (const intent of detail.intents || []) {
+          if (intent.to) producedAt[intent.to] = intent.concluded_at || intent.created_at;
+        }
+        for (const fact of detail.facts || []) {
+          const producer = (detail.intents || []).find(i => i.to === fact.id);
+          const item = {
+            projectId: p.id,
+            projectTitle: p.title,
+            factId: fact.id,
+            description: fact.description,
+            producer: producer?.id || '',
+            ts: producedAt[fact.id] || p.created_at,
+          };
+          if (fact.id === 'origin' || fact.id === 'goal') setup.push(item);
+          else derived.push(item);
+        }
+      }
+      const out = derived.length ? derived : setup;
+      out.sort((a, b) => String(b.ts || '').localeCompare(String(a.ts || '')));
+      return out.slice(0, limit);
+    },
+
+    dashboardIntents(limit = 6) {
+      const out = [];
+      for (const p of this.projects) {
+        const detail = this.dashboardDetails[p.id];
+        if (!detail) continue;
+        for (const intent of detail.intents || []) {
+          out.push({
+            projectId: p.id,
+            projectTitle: p.title,
+            id: intent.id,
+            description: intent.description,
+            from: (intent.from || []).join(', '),
+            to: intent.to || '',
+            worker: intent.worker || '',
+            created_at: intent.created_at,
+            concluded_at: intent.concluded_at,
+            ts: intent.created_at,
+            statusLabel: intent.concluded_at ? 'Concluded' : (intent.worker ? 'Working' : 'Unclaimed'),
+            statusKind: intent.concluded_at ? 'concluded' : (intent.worker ? 'working' : 'unclaimed'),
+          });
+        }
+      }
+      out.sort((a, b) => String(b.ts || '').localeCompare(String(a.ts || '')));
+      return out.slice(0, limit);
+    },
+
+    openDashboardFinding(item) {
+      const open = () => {
+        if (this.selectedProjectId !== item.projectId) {
+          this.openProject(item.projectId).then(() => this.whenGraphReady(() => this.openBoardFact(item.factId)));
+        } else {
+          this.whenGraphReady(() => this.openBoardFact(item.factId));
+        }
+      };
+      open();
+    },
+
+    openDashboardIntent(item) {
+      const open = () => {
+        if (this.selectedProjectId !== item.projectId) {
+          this.openProject(item.projectId).then(() => this.whenGraphReady(() => this.openBoardIntent(item.id)));
+        } else {
+          this.whenGraphReady(() => this.openBoardIntent(item.id));
+        }
+      };
+      open();
+    },
+
+    whenGraphReady(fn, tries = 40) {
+      if (this.cy) { fn(); return; }
+      if (tries <= 0) return;
+      setTimeout(() => this.whenGraphReady(fn, tries - 1), 50);
+    },
+
+    openSearch() {
+      this.searchOpen = true;
+      this.searchQuery = '';
+      this.searchIndex = 0;
+      this.$nextTick(() => setTimeout(() => { try { this.$refs.searchInput?.focus(); } catch (e) {} }, 20));
+    },
+
+    closeSearch() {
+      this.searchOpen = false;
+      this.searchQuery = '';
+      this.searchIndex = 0;
+    },
+
+    searchResults() {
+      const q = (this.searchQuery || '').trim().toLowerCase();
+      const pages = [
+        { key: 'page:dashboard', type: 'page', label: 'Dashboard', hint: 'Overview', action: 'dashboard' },
+        { key: 'page:projects', type: 'page', label: 'Projects', hint: 'All projects', action: 'projects' },
+        { key: 'page:settings', type: 'page', label: 'Server settings', hint: 'Settings', action: 'settings' },
+      ];
+      const projectItems = [...this.projects]
+        .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+        .map(p => ({ key: `project:${p.id}`, type: 'project', label: p.title, hint: p.id, action: 'project', id: p.id }));
+      const items = [...pages, ...projectItems].filter(item => {
+        if (!q) return true;
+        return `${item.label} ${item.hint}`.toLowerCase().includes(q);
+      });
+      return items.slice(0, 8).map((item, index) => ({ ...item, index }));
+    },
+
+    searchSelect(item) {
+      this.closeSearch();
+      if (item.action === 'dashboard') this.goDashboard();
+      else if (item.action === 'projects') this.goProjects();
+      else if (item.action === 'settings') { this.loadSettings(); this.showSettings = true; }
+      else if (item.action === 'project') this.openProject(item.id);
+    },
+
+    searchChooseFirst() {
+      const results = this.searchResults();
+      if (!results.length) return;
+      const index = Math.min(Math.max(0, this.searchIndex), results.length - 1);
+      this.searchSelect(results[index]);
+    },
+
+    initTheme() {
+      let saved = null;
+      try { saved = localStorage.getItem('cairn-theme'); } catch {}
+      const current = document.documentElement.dataset.theme;
+      const preferred = window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      this.theme = (saved === 'dark' || saved === 'light') ? saved
+        : (current === 'dark' || current === 'light') ? current : preferred;
+      this.applyTheme();
+    },
+
+    applyTheme() {
+      document.documentElement.dataset.theme = this.theme;
+      document.documentElement.classList.toggle('dark', this.theme === 'dark');
+      if (this.cy) {
+        try { this.cy.style().fromJson(this.graphStyles()).update(); } catch (e) {}
+      }
+    },
+
+    toggleTheme() {
+      this.theme = this.theme === 'dark' ? 'light' : 'dark';
+      try { localStorage.setItem('cairn-theme', this.theme); } catch {}
+      this.applyTheme();
+    },
+
+    setBoardMode(value, options = {}) {
+      this.boardMode = !!value;
+      if (options.persist !== false) {
+        try { localStorage.setItem('cairn-board', this.boardMode ? '1' : '0'); } catch {}
+      }
+      if (!this.boardMode && options.fit !== false) {
+        this._graphFocused = false;
+        this.$nextTick(() => {
+          try { if (this.cy) { this.cy.resize(); this.fitGraph(); } } catch (e) {}
+        });
+      }
+      if (options.fit === false) {
+        this._graphFocused = true;
+        this._suppressAutoFitUntil = Date.now() + 900;
+        if (this._autoFitTimer) { clearTimeout(this._autoFitTimer); this._autoFitTimer = null; }
+      }
+    },
+
+    boardMatch(values) {
+      const q = (this.boardFilter || '').trim().toLowerCase();
+      if (!q) return true;
+      return values.some(v => String(v || '').toLowerCase().includes(q));
+    },
+
+    factRank(id) {
+      if (id === 'origin') return -1e9;
+      if (id === 'goal') return -1e9 + 1;
+      const n = parseInt(String(id).replace(/\D/g, ''), 10);
+      return Number.isFinite(n) ? -n : 0;
+    },
+
+    boardFacts() {
+      if (!this.project) return [];
+      return [...this.project.facts]
+        .filter(f => this.boardMatch([f.id, f.description]))
+        .sort((a, b) => this.factRank(a.id) - this.factRank(b.id));
+    },
+
+    boardOpenIntents() {
+      if (!this.project) return [];
+      return [...this.project.intents]
+        .filter(i => !i.concluded_at)
+        .filter(i => this.boardMatch([i.id, i.description, (i.from || []).join(' '), i.worker]))
+        .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+    },
+
+    boardConcludedIntents() {
+      if (!this.project) return [];
+      return [...this.project.intents]
+        .filter(i => !!i.concluded_at)
+        .filter(i => this.boardMatch([i.id, i.description, (i.from || []).join(' '), i.to, i.worker]))
+        .sort((a, b) => String(b.concluded_at || '').localeCompare(String(a.concluded_at || '')));
+    },
+
+    openBoardFact(factId) {
+      this.selectedFacts = [factId];
+      this.selectFact(factId);
+      this.sideTab = 'detail';
+      this._suppressAutoFitUntil = Date.now() + 900;
+      this.setBoardMode(false, { persist: false, fit: false });
+      this.$nextTick(() => {
+        try {
+          if (this.cy) { this.cy.resize(); this.centerGraphOnFact(factId); }
+          document.getElementById('detailPanel')?.focus({ preventScroll: true });
+        } catch (e) {}
+      });
+    },
+
+    openBoardIntent(intentId) {
+      this.selectIntent(intentId);
+      this.sideTab = 'detail';
+      this._suppressAutoFitUntil = Date.now() + 900;
+      this.setBoardMode(false, { persist: false, fit: false });
+      this.$nextTick(() => {
+        try {
+          if (this.cy) { this.cy.resize(); this.centerGraphOnIntent(intentId); }
+          document.getElementById('detailPanel')?.focus({ preventScroll: true });
+        } catch (e) {}
+      });
     },
 
     handleRoute() {
@@ -1154,8 +2358,10 @@ function cairnApp() {
         if (this.selectedProjectId !== id || this.view !== 'graph') {
           this.openProject(id);
         }
-      } else {
+      } else if (hash === '#/projects') {
         if (this.view !== 'list') this.backToList(true);
+      } else {
+        if (this.view !== 'dashboard') this.goDashboard(true);
       }
     },
 
@@ -1260,6 +2466,61 @@ function cairnApp() {
 
     actorName() {
       return this.localPrefs.actor_name.trim() || 'Human';
+    },
+
+    actorInitial() {
+      return (this.actorName()[0] || 'H').toUpperCase();
+    },
+
+    formatNumber(value) {
+      const n = Number(value);
+      return Number.isFinite(n) ? n.toLocaleString() : '0';
+    },
+
+    formatShortDate(ts) {
+      if (!ts) return '—';
+      const d = new Date(ts);
+      if (Number.isNaN(d.getTime())) return '—';
+      return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+    },
+
+    relativeTime(ts) {
+      if (!ts) return '';
+      const t = new Date(ts).getTime();
+      if (!Number.isFinite(t)) return '';
+      const diff = Date.now() - t;
+      if (diff < 45 * 1000) return 'just now';
+      const mins = Math.round(diff / 60000);
+      if (mins < 60) return `${mins}m ago`;
+      const hours = Math.round(mins / 60);
+      if (hours < 24) return `${hours}h ago`;
+      const days = Math.round(hours / 24);
+      if (days < 30) return `${days}d ago`;
+      return this.formatShortDate(ts);
+    },
+
+    projectStatusPillClass(status) {
+      if (status === 'active') return 'cx-pill--active';
+      if (status === 'stopped') return 'cx-pill--amber';
+      return 'cx-pill--neutral';
+    },
+
+    intentPillClass(item) {
+      if (!item) return 'cx-pill--neutral';
+      if (item.statusKind === 'working') return 'cx-pill--amber';
+      if (item.statusKind === 'unclaimed') return 'cx-pill--info';
+      return 'cx-pill--neutral';
+    },
+
+    factIdToneClass(factId) {
+      if (factId === 'origin') return 'cx-code--teal';
+      if (factId === 'goal') return 'cx-code--rose';
+      return 'cx-code--violet';
+    },
+
+    projectOpenIntentCount() {
+      if (!this.project || !Array.isArray(this.project.intents)) return 0;
+      return this.project.intents.filter(i => !i.concluded_at).length;
     },
 
     projectStatusBadgeClass(status) {
@@ -2081,6 +3342,8 @@ function cairnApp() {
       }
       this.rememberProjectListScroll();
       this.selectedProjectId = id;
+      this.lastProjectId = id;
+      try { localStorage.setItem('cairn-last-project', id); } catch {}
       this.selectedNode = null;
       this.selectedFacts = [];
       this.selectedTimelineEntryId = null;
@@ -2121,7 +3384,7 @@ function cairnApp() {
       this.selectedTimelineEntryId = null;
       this.teardownAutoFit();
       if (this.cy) { this.cy.destroy(); this.cy = null; }
-      if (!fromRoute) location.hash = '/';
+      if (!fromRoute && location.hash !== '#/projects') location.hash = '/projects';
       this.loadProjects().then(() => this.restoreProjectListScroll());
     },
 
@@ -2133,6 +3396,10 @@ function cairnApp() {
           this.updateGraph();
         } else {
           await this.loadProjects();
+          if (this.view === 'dashboard') {
+            this._dashboardTick = (this._dashboardTick || 0) + 1;
+            if (this._dashboardTick % 3 === 0) await this.loadDashboardDetails(true);
+          }
         }
       }, 5000);
     },
@@ -2196,6 +3463,12 @@ function cairnApp() {
       });
       this.cy = rawCy;
       const self = this;
+      rawCy.one('layoutstop', () => {
+        if (!self.cy || self._graphFocused) return;
+        setTimeout(() => {
+          try { self.cy.resize(); self.cy.fit(undefined, 50); } catch (e) {}
+        }, 20);
+      });
       rawCy.on('tap', 'node', e => self.onNodeTap(e));
       rawCy.on('tap', 'edge', e => self.onEdgeTap(e));
       rawCy.on('tap', e => { if (e.target === rawCy) self.clearSelection(); });
@@ -2204,21 +3477,23 @@ function cairnApp() {
     },
 
     graphStyles() {
+      const dark = this.theme === 'dark';
+      const labelBg = dark ? '#27272a' : '#f8fafc';
       const common = { 'text-valign':'center','text-halign':'center','font-family':'-apple-system,BlinkMacSystemFont,Inter,sans-serif' };
       return [
         { selector: 'node[nodeType="origin"]', style: { ...common, shape:'round-rectangle','background-color':'#14b8a6',label:'data(label)',color:'#fff','font-size':'11px','font-weight':'bold','text-wrap':'wrap','text-max-width':'92px','text-overflow-wrap':'anywhere',width:'data(width)',height:'data(height)','border-width':0 }},
         { selector: 'node[nodeType="goal"]', style: { ...common, shape:'round-rectangle','background-color':'#f43f5e',label:'data(label)',color:'#fff','font-size':'11px','font-weight':'bold','text-wrap':'wrap','text-max-width':'92px','text-overflow-wrap':'anywhere',width:'data(width)',height:'data(height)','border-width':0 }},
         { selector: 'node[nodeType="fact"]', style: { ...common, shape:'round-rectangle','background-color':'#6366f1',label:'data(label)',color:'#fff','font-size':'10px','font-weight':'bold','text-wrap':'wrap','text-max-width':'116px','text-overflow-wrap':'anywhere',width:'data(width)',height:'data(height)','border-width':0 }},
         { selector: 'node[nodeType="in_progress"]', style: { ...common, shape:'ellipse','background-color':'#f59e0b','background-opacity':0.8,label:'?',color:'#fff','font-size':'11px','font-weight':'bold',width:22,height:22,'border-width':2,'border-color':'#d97706' }},
-        { selector: 'node[nodeType="unclaimed"]', style: { ...common, shape:'ellipse','background-color':'#cbd5e1','background-opacity':0.5,label:'?',color:'#94a3b8','font-size':'11px','font-weight':'bold',width:20,height:20,'border-width':1.5,'border-color':'#94a3b8','border-style':'dashed' }},
-        { selector: 'node[nodeType="bootstrap_pending"]', style: { ...common, shape:'round-rectangle','background-color':'#fff7ed','background-opacity':0.96,label:'data(label)',color:'#c2410c','font-size':'10px','font-weight':'bold',width:'data(width)',height:'data(height)','border-width':1.5,'border-color':'#fdba74','border-style':'dashed','text-wrap':'wrap','text-max-width':'70px' }},
+        { selector: 'node[nodeType="unclaimed"]', style: { ...common, shape:'ellipse','background-color': dark ? '#334155' : '#cbd5e1','background-opacity':0.5,label:'?',color:'#94a3b8','font-size':'11px','font-weight':'bold',width:20,height:20,'border-width':1.5,'border-color':'#94a3b8','border-style':'dashed' }},
+        { selector: 'node[nodeType="bootstrap_pending"]', style: { ...common, shape:'round-rectangle','background-color': dark ? '#27272a' : '#fff7ed','background-opacity':0.96,label:'data(label)',color: dark ? '#fdba74' : '#c2410c','font-size':'10px','font-weight':'bold',width:'data(width)',height:'data(height)','border-width':1.5,'border-color':'#fdba74','border-style':'dashed','text-wrap':'wrap','text-max-width':'70px' }},
         { selector: 'node[nodeType="bootstrap_running"]', style: { ...common, shape:'round-rectangle','background-color':'#fb923c','background-opacity':0.96,label:'data(label)',color:'#fff7ed','font-size':'10px','font-weight':'bold',width:'data(width)',height:'data(height)','border-width':2,'border-color':'#ea580c','text-wrap':'wrap','text-max-width':'70px' }},
 
-        { selector: 'edge[status="concluded"]', style: { width:2,'line-color':'#6ee7b7','target-arrow-color':'#6ee7b7','target-arrow-shape':'triangle','curve-style':'bezier',label:'data(label)','font-size':'7px',color:'#94a3b8','text-rotation':'autorotate','text-margin-y':-9,'text-max-width':'80px','text-wrap':'ellipsis','text-background-color':'#f8fafc','text-background-opacity':0.85,'text-background-padding':'2px','text-events':'yes','arrow-scale':0.9 }},
-        { selector: 'edge[status="in_progress"]', style: { width:2,'line-color':'#fbbf24','line-style':'dashed','line-dash-pattern':[8,4],'line-dash-offset':0,'target-arrow-color':'#fbbf24','target-arrow-shape':'triangle','curve-style':'bezier',label:'data(label)','font-size':'7px',color:'#b45309','text-rotation':'autorotate','text-margin-y':-9,'text-max-width':'80px','text-wrap':'ellipsis','text-background-color':'#fffbeb','text-background-opacity':0.85,'text-background-padding':'2px','text-events':'yes','arrow-scale':0.9 }},
-        { selector: 'edge[status="unclaimed"]', style: { width:1.5,'line-color':'#cbd5e1','line-style':'dashed','line-dash-pattern':[5,5],'target-arrow-color':'#cbd5e1','target-arrow-shape':'triangle','curve-style':'bezier',label:'data(label)','font-size':'7px',color:'#94a3b8','text-rotation':'autorotate','text-margin-y':-9,'text-max-width':'80px','text-wrap':'ellipsis','text-background-color':'#f8fafc','text-background-opacity':0.85,'text-background-padding':'2px','text-events':'yes','arrow-scale':0.7 }},
-        { selector: 'edge[status="bootstrap_pending"]', style: { width:2,'line-color':'#fdba74','line-style':'dashed','line-dash-pattern':[8,4],'line-dash-offset':0,'target-arrow-color':'#fdba74','target-arrow-shape':'triangle','curve-style':'bezier',label:'data(label)','font-size':'7px',color:'#c2410c','text-rotation':'autorotate','text-margin-y':-9,'text-max-width':'88px','text-wrap':'ellipsis','text-background-color':'#fff7ed','text-background-opacity':0.92,'text-background-padding':'2px','text-events':'yes','arrow-scale':0.85 }},
-        { selector: 'edge[status="bootstrap_running"]', style: { width:2.5,'line-color':'#fb923c','line-style':'dashed','line-dash-pattern':[10,4],'line-dash-offset':0,'target-arrow-color':'#fb923c','target-arrow-shape':'triangle','curve-style':'bezier',label:'data(label)','font-size':'7px',color:'#c2410c','text-rotation':'autorotate','text-margin-y':-9,'text-max-width':'88px','text-wrap':'ellipsis','text-background-color':'#fff7ed','text-background-opacity':0.92,'text-background-padding':'2px','text-events':'yes','arrow-scale':0.95 }},
+        { selector: 'edge[status="concluded"]', style: { width:2,'line-color':'#6ee7b7','target-arrow-color':'#6ee7b7','target-arrow-shape':'triangle','curve-style':'bezier',label:'data(label)','font-size':'7px',color:'#94a3b8','text-rotation':'autorotate','text-margin-y':-9,'text-max-width':'80px','text-wrap':'ellipsis','text-background-color':labelBg,'text-background-opacity':0.85,'text-background-padding':'2px','text-events':'yes','arrow-scale':0.9 }},
+        { selector: 'edge[status="in_progress"]', style: { width:2,'line-color':'#fbbf24','line-style':'dashed','line-dash-pattern':[8,4],'line-dash-offset':0,'target-arrow-color':'#fbbf24','target-arrow-shape':'triangle','curve-style':'bezier',label:'data(label)','font-size':'7px',color: dark ? '#fbbf24' : '#b45309','text-rotation':'autorotate','text-margin-y':-9,'text-max-width':'80px','text-wrap':'ellipsis','text-background-color': dark ? '#27272a' : '#fffbeb','text-background-opacity':0.85,'text-background-padding':'2px','text-events':'yes','arrow-scale':0.9 }},
+        { selector: 'edge[status="unclaimed"]', style: { width:1.5,'line-color': dark ? '#475569' : '#cbd5e1','line-style':'dashed','line-dash-pattern':[5,5],'target-arrow-color': dark ? '#475569' : '#cbd5e1','target-arrow-shape':'triangle','curve-style':'bezier',label:'data(label)','font-size':'7px',color:'#94a3b8','text-rotation':'autorotate','text-margin-y':-9,'text-max-width':'80px','text-wrap':'ellipsis','text-background-color':labelBg,'text-background-opacity':0.85,'text-background-padding':'2px','text-events':'yes','arrow-scale':0.7 }},
+        { selector: 'edge[status="bootstrap_pending"]', style: { width:2,'line-color':'#fdba74','line-style':'dashed','line-dash-pattern':[8,4],'line-dash-offset':0,'target-arrow-color':'#fdba74','target-arrow-shape':'triangle','curve-style':'bezier',label:'data(label)','font-size':'7px',color: dark ? '#fdba74' : '#c2410c','text-rotation':'autorotate','text-margin-y':-9,'text-max-width':'88px','text-wrap':'ellipsis','text-background-color': dark ? '#27272a' : '#fff7ed','text-background-opacity':0.92,'text-background-padding':'2px','text-events':'yes','arrow-scale':0.85 }},
+        { selector: 'edge[status="bootstrap_running"]', style: { width:2.5,'line-color':'#fb923c','line-style':'dashed','line-dash-pattern':[10,4],'line-dash-offset':0,'target-arrow-color':'#fb923c','target-arrow-shape':'triangle','curve-style':'bezier',label:'data(label)','font-size':'7px',color: dark ? '#fdba74' : '#c2410c','text-rotation':'autorotate','text-margin-y':-9,'text-max-width':'88px','text-wrap':'ellipsis','text-background-color': dark ? '#27272a' : '#fff7ed','text-background-opacity':0.92,'text-background-padding':'2px','text-events':'yes','arrow-scale':0.95 }},
         { selector: 'edge[edgeType="bootstrap_scope"]', style: { label:'',width:1.8,'curve-style':'bezier','line-style':'dotted','line-dash-pattern':[2,5],'target-arrow-shape':'triangle-backcurve','arrow-scale':0.75,'target-distance-from-node':2 }},
 
         { selector: '.highlight', style: { 'z-index':999 }},
@@ -2446,7 +3721,11 @@ function cairnApp() {
       });
     },
 
-    fitGraph() { if (this.cy) this.cy.fit(undefined, 50); },
+    fitGraph() {
+      this._graphFocused = false;
+      if (this._centerAnimation) { this._centerAnimation.stop(); this._centerAnimation = null; }
+      if (this.cy) this.cy.fit(undefined, 50);
+    },
 
     centerGraphOnElements(eles) {
       if (!this.cy || !eles || eles.length === 0) return;
@@ -2537,19 +3816,25 @@ function cairnApp() {
       this.teardownAutoFit();
       const container = document.getElementById('cy');
       if (!container || !this.cy) return;
-      let fitTimer = null;
       this._resizeObserver = new ResizeObserver(() => {
-        clearTimeout(fitTimer);
-        fitTimer = setTimeout(() => {
-          if (this.cy) {
-            const clampedWidth = this.clampPanelWidth(this.sidePanelWidth);
-            if (clampedWidth !== this.sidePanelWidth) {
-              this.sidePanelWidth = clampedWidth;
-              this.saveSidePanelWidth();
-            }
+        clearTimeout(this._autoFitTimer);
+        this._autoFitTimer = setTimeout(() => {
+          if (!this.cy) return;
+          if (this._graphFocused) {
             this.cy.resize();
-            this.cy.fit(undefined, 50);
+            return;
           }
+          if (Date.now() < (this._suppressAutoFitUntil || 0)) {
+            this.cy.resize();
+            return;
+          }
+          const clampedWidth = this.clampPanelWidth(this.sidePanelWidth);
+          if (clampedWidth !== this.sidePanelWidth) {
+            this.sidePanelWidth = clampedWidth;
+            this.saveSidePanelWidth();
+          }
+          this.cy.resize();
+          this.cy.fit(undefined, 50);
         }, 200);
       });
       this._resizeObserver.observe(container);
@@ -2559,6 +3844,10 @@ function cairnApp() {
       if (this._resizeObserver) {
         this._resizeObserver.disconnect();
         this._resizeObserver = null;
+      }
+      if (this._autoFitTimer) {
+        clearTimeout(this._autoFitTimer);
+        this._autoFitTimer = null;
       }
     },
     applySelectedLayout() {

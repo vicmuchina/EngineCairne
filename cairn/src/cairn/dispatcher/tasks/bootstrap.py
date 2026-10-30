@@ -18,9 +18,12 @@ from cairn.dispatcher.tasks.common import (
     best_effort_release,
     cancel_reason,
     did_timeout,
+    driver_streams_json_events,
+    finish_worker_activity,
     project_allows_conclude_fallback,
     preview,
     run_worker_process,
+    start_worker_activity,
     task_healthcheck_enabled,
     write_conclude_result,
     write_conclude_result_with_fact_id,
@@ -98,18 +101,36 @@ def run_bootstrap_task(
         execute = driver.build_execute(worker, prompt, session)
         session = execute.session
         execute_started = time.perf_counter()
-        first = run_worker_process(
-            container_manager,
-            container_name,
-            worker,
-            execute.argv,
-            phase="bootstrap",
-            timeout_seconds=config.tasks.bootstrap.timeout,
-            lease=lease,
-            cancellation=cancellation,
+        activity = start_worker_activity(
+            client,
+            project.project.id,
+            worker.name,
+            task="bootstrap",
+            intent_id=intent.id,
+            intent_description=intent.description,
         )
+        try:
+            first = run_worker_process(
+                container_manager,
+                container_name,
+                worker,
+                execute.argv,
+                phase="bootstrap",
+                timeout_seconds=config.tasks.bootstrap.timeout,
+                lease=lease,
+                cancellation=cancellation,
+                on_stdout_line=activity.feed_line
+                if activity is not None and driver_streams_json_events(driver)
+                else None,
+            )
+        except BaseException as exc:
+            finish_worker_activity(activity, None, error=f"{type(exc).__name__}: {exc}")
+            raise
+        try:
+            session = driver.extract_session(session, first.stdout, first.stderr)
+        finally:
+            finish_worker_activity(activity, first, session=session)
         execute_ms = int((time.perf_counter() - execute_started) * 1000)
-        session = driver.extract_session(session, first.stdout, first.stderr)
         cancelled = cancel_reason(first, cancellation)
         if cancelled is not None:
             LOG.info(
@@ -293,16 +314,32 @@ def _try_conclude_fallback(
     conclude_argv = driver.build_conclude(worker, prompt, session)
     LOG.info("starting bootstrap conclude fallback project=%s intent=%s worker=%s", project.project.id, intent.id, worker.name)
     conclude_started = time.perf_counter()
-    result = run_worker_process(
-        container_manager,
-        container_name,
-        worker,
-        conclude_argv,
-        phase="bootstrap_conclude",
-        timeout_seconds=config.tasks.bootstrap.conclude_timeout,
-        lease=lease,
-        cancellation=cancellation,
+    activity = start_worker_activity(
+        client,
+        project.project.id,
+        worker.name,
+        task="bootstrap_conclude",
+        intent_id=intent.id,
+        intent_description=intent.description,
     )
+    try:
+        result = run_worker_process(
+            container_manager,
+            container_name,
+            worker,
+            conclude_argv,
+            phase="bootstrap_conclude",
+            timeout_seconds=config.tasks.bootstrap.conclude_timeout,
+            lease=lease,
+            cancellation=cancellation,
+            on_stdout_line=activity.feed_line
+            if activity is not None and driver_streams_json_events(driver)
+            else None,
+        )
+    except BaseException as exc:
+        finish_worker_activity(activity, None, error=f"{type(exc).__name__}: {exc}")
+        raise
+    finish_worker_activity(activity, result, session=session)
     conclude_ms = int((time.perf_counter() - conclude_started) * 1000)
     cancelled = cancel_reason(result, cancellation)
     if cancelled is not None:

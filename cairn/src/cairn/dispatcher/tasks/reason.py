@@ -8,6 +8,7 @@ from cairn.dispatcher.contracts import parse_json_output, validate_reason_payloa
 from cairn.dispatcher.prompting import (
     format_fact_ids,
     format_open_intents,
+    format_steering,
     load_prompt,
     render_prompt,
 )
@@ -19,9 +20,15 @@ from cairn.dispatcher.tasks.common import (
     best_effort_release_reason,
     cancel_reason,
     did_timeout,
+    driver_streams_json_events,
+    fetch_pending_steering,
+    finish_worker_activity,
+    mark_steering_delivered,
     preview,
     run_worker_process,
+    start_worker_activity,
     task_healthcheck_enabled,
+    worker_accepted_prompt,
     write_graph_snapshot_reference,
 )
 from cairn.dispatcher.workers.registry import get_driver
@@ -91,14 +98,16 @@ def run_reason_task(
             if intent.to is None
         ]
         allowed_fact_ids = [fact.id for fact in project.facts if fact.id != "goal"]
+        steering = fetch_pending_steering(client, project.project.id)
         LOG.debug(
-            "reason context prepared project=%s worker=%s facts=%s allowed_fact_ids=%s hints=%s open_intents=%s",
+            "reason context prepared project=%s worker=%s facts=%s allowed_fact_ids=%s hints=%s open_intents=%s steering=%s",
             project.project.id,
             worker.name,
             len(project.facts),
             len(allowed_fact_ids),
             len(project.hints),
             len(open_intents),
+            len(steering),
         )
         prompt = render_prompt(
             load_prompt(config.runtime.prompt_group, "reason.md"),
@@ -111,6 +120,7 @@ def run_reason_task(
                 ),
                 "fact_ids": format_fact_ids(allowed_fact_ids),
                 "open_intents": format_open_intents(open_intents),
+                "steering": format_steering(steering),
                 "max_intents": str(config.tasks.reason.max_intents),
             },
         )
@@ -118,19 +128,44 @@ def run_reason_task(
         session = driver.prepare_session()
         command = driver.build_execute(worker, prompt, session)
         execute_started = time.perf_counter()
-        result = run_worker_process(
-            container_manager,
-            container_name,
-            worker,
-            command.argv,
-            phase="reason_execute",
-            timeout_seconds=config.tasks.reason.timeout,
-            lease=lease,
-            cancellation=cancellation,
+        activity = start_worker_activity(
+            client,
+            project.project.id,
+            worker.name,
+            task="reason",
+        )
+        try:
+            result = run_worker_process(
+                container_manager,
+                container_name,
+                worker,
+                command.argv,
+                phase="reason_execute",
+                timeout_seconds=config.tasks.reason.timeout,
+                lease=lease,
+                cancellation=cancellation,
+                on_stdout_line=activity.feed_line
+                if activity is not None and driver_streams_json_events(driver)
+                else None,
+            )
+        except BaseException as exc:
+            finish_worker_activity(activity, None, error=f"{type(exc).__name__}: {exc}")
+            raise
+        try:
+            session = driver.extract_session(session, result.stdout, result.stderr)
+        finally:
+            finish_worker_activity(activity, result, session=session)
+        # Only after the worker really started: a spawn failure must leave the steering
+        # pending so the next task still receives it (at-least-once).
+        mark_steering_delivered(
+            client,
+            project.project.id,
+            steering,
+            worker.name,
+            accepted=worker_accepted_prompt(result),
         )
         execute_ms = int((time.perf_counter() - execute_started) * 1000)
         total_ms = int((time.perf_counter() - task_started) * 1000)
-        session = driver.extract_session(session, result.stdout, result.stderr)
         cancelled = cancel_reason(result, cancellation)
         if cancelled is not None:
             LOG.info(

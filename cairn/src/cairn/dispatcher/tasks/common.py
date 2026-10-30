@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from cairn.dispatcher.config import DispatchConfig, WorkerConfig
@@ -11,10 +13,12 @@ from cairn.dispatcher.runtime.cancellation import TaskCancellation
 from cairn.dispatcher.runtime.containers import ContainerManager
 from cairn.dispatcher.runtime.heartbeat import HeartbeatLease
 from cairn.dispatcher.runtime.process import ProcessResult
+from cairn.dispatcher.workers.activity import WorkerActivityRecorder
 
 PROCESS_COMMUNICATE_GRACE_SECONDS = 15
 LOG_PREVIEW_LIMIT = 1200
 GRAPH_SNAPSHOT_ROOT = "/tmp/cairn-prompts"
+WORKER_ACTIVITY_ENV = "CAIRN_WORKER_ACTIVITY"
 LOG = logging.getLogger(__name__)
 
 
@@ -53,6 +57,101 @@ def task_healthcheck_enabled(config: DispatchConfig) -> bool:
     return config.runtime.worker_healthcheck == "startup_and_task"
 
 
+def fetch_pending_steering(
+    client: CairnClient, project_id: str, *, intent_id: str | None = None
+) -> list[dict]:
+    """Pending operator steering for the next worker prompt (task-boundary delivery).
+
+    Project-level steering (no intent_id) targets whichever task runs next; intent-level
+    steering is only handed to that intent's explore task.
+    """
+    fetch = getattr(client, "pending_steering", None)
+    if fetch is None:
+        return []
+    try:
+        if intent_id is None:
+            items = fetch(project_id, None, project_only=True)
+        else:
+            items = fetch(project_id, intent_id)
+    except TypeError:
+        # Older/simpler clients without the keyword.
+        items = fetch(project_id, intent_id)
+    except Exception:  # pragma: no cover - never fail a task because steering is unavailable
+        LOG.warning("pending steering fetch failed project=%s", project_id, exc_info=True)
+        return []
+    if not isinstance(items, list):
+        return []
+    return [item for item in items if isinstance(item, dict)]
+
+
+# A shell that cannot exec the worker reports these codes: the prompt never reached a
+# worker, so steering carried by that prompt must stay pending for the next task.
+SPAWN_FAILURE_CODES = (126, 127)
+
+
+def worker_accepted_prompt(result: ProcessResult) -> bool:
+    """Did the worker process actually start and receive its prompt?
+
+    Steering is at-least-once: it is marked ``delivered`` only when the process really ran
+    with it. A missing binary (126/127 from the ``sh -lc`` wrapper), a failed spawn (no
+    output at all) or an immediate transport error means the prompt was never accepted, so
+    the steering row stays ``pending`` and is re-delivered at the next task boundary.
+    """
+    if result.returncode in SPAWN_FAILURE_CODES:
+        return False
+    if not (result.stdout or "").strip() and not (result.stderr or "").strip():
+        return False
+    return True
+
+
+def mark_steering_delivered(
+    client: CairnClient,
+    project_id: str,
+    items: list[dict],
+    worker: str,
+    *,
+    run: str | None = None,
+    accepted: bool = True,
+) -> None:
+    """Mark steering delivered after a worker process ran with it in its prompt."""
+    deliver = getattr(client, "deliver_steering", None)
+    if deliver is None or not items:
+        return
+    if not accepted:
+        LOG.warning(
+            "steering delivery skipped because the worker never accepted the prompt "
+            "project=%s worker=%s steering=%s",
+            project_id,
+            worker,
+            [item.get("id") for item in items],
+        )
+        return
+    for item in items:
+        steering_id = item.get("id")
+        if steering_id is None:
+            continue
+        try:
+            response = deliver(project_id, int(steering_id), worker, run)
+            if getattr(response, "ok", False):
+                LOG.info(
+                    "steering delivered project=%s steering=%s worker=%s",
+                    project_id,
+                    steering_id,
+                    worker,
+                )
+            else:
+                LOG.warning(
+                    "steering delivery write failed project=%s steering=%s status=%s",
+                    project_id,
+                    steering_id,
+                    getattr(response, "status_code", None),
+                )
+        except Exception:  # pragma: no cover
+            LOG.warning(
+                "steering delivery failed project=%s steering=%s", project_id, steering_id, exc_info=True
+            )
+
+
 def write_graph_snapshot_reference(
     container_manager: ContainerManager,
     container_name: str,
@@ -80,6 +179,7 @@ def run_worker_process(
     timeout_seconds: int,
     lease: HeartbeatLease | None = None,
     cancellation: TaskCancellation | None = None,
+    on_stdout_line: Callable[[str], None] | None = None,
 ) -> ProcessResult:
     LOG.info(
         "starting container exec container=%s worker=%s phase=%s timeout=%ss",
@@ -88,11 +188,13 @@ def run_worker_process(
         phase,
         timeout_seconds,
     )
+    kwargs = {"on_stdout_line": on_stdout_line} if on_stdout_line is not None else {}
     process = container_manager.build_exec_process(
         container_name,
         dict(worker.env),
         argv,
         timeout_seconds=timeout_seconds,
+        **kwargs,
     )
     process.start()
     if lease is not None:
@@ -106,6 +208,85 @@ def run_worker_process(
             lease.attach_process(None)
         if cancellation is not None:
             cancellation.attach_process(None)
+
+
+def worker_activity_enabled() -> bool:
+    """Worker activity capture is on by default; ``CAIRN_WORKER_ACTIVITY=0`` opts out."""
+    value = os.environ.get(WORKER_ACTIVITY_ENV, "1").strip().lower()
+    return value not in ("0", "false", "no", "off", "disabled")
+
+
+def driver_streams_json_events(driver: object) -> bool:
+    """True when the driver's stdout is pi JSONL worth parsing live."""
+    check = getattr(driver, "streams_json_events", None)
+    if not callable(check):
+        return False
+    try:
+        return bool(check())
+    except Exception:  # pragma: no cover - defensive
+        return False
+
+
+def start_worker_activity(
+    client: CairnClient | object,
+    project_id: str,
+    worker_name: str,
+    *,
+    task: str,
+    intent_id: str | None = None,
+    intent_description: str | None = None,
+) -> WorkerActivityRecorder | None:
+    """Start a worker_run row + writer thread, or return None when unavailable.
+
+    Observability must never prevent a worker from running: a client without the activity
+    writer (e.g. an in-process test double) and any recorder construction error both yield
+    None and the task continues exactly as before.
+    """
+    if not worker_activity_enabled():
+        return None
+    if getattr(client, "record_activity", None) is None:
+        return None
+    try:
+        recorder = WorkerActivityRecorder(
+            client,
+            project_id=project_id,
+            worker=worker_name,
+            task=task,
+            intent_id=intent_id,
+            intent_description=intent_description,
+        )
+        recorder.start()
+        return recorder
+    except Exception:  # pragma: no cover - defensive, never break a task
+        LOG.warning(
+            "failed to start worker activity project=%s worker=%s task=%s",
+            project_id,
+            worker_name,
+            task,
+            exc_info=True,
+        )
+        return None
+
+
+def finish_worker_activity(
+    recorder: WorkerActivityRecorder | None,
+    result: ProcessResult | None,
+    *,
+    session: str | None = None,
+    error: str | None = None,
+) -> None:
+    """Close the run after the process returns (or raises); never raises."""
+    if recorder is None:
+        return
+    try:
+        recorder.finish(result=result, session=session, error=error)
+    except Exception:  # pragma: no cover - observability must never break a task
+        LOG.warning(
+            "failed to finish worker activity project=%s run=%s",
+            recorder.project_id,
+            recorder.run_id,
+            exc_info=True,
+        )
 
 
 def project_allows_conclude_fallback(client: CairnClient, project_id: str, *, worker_name: str, intent_id: str) -> bool:

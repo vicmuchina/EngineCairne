@@ -5,7 +5,7 @@ import time
 
 from cairn.dispatcher.config import DispatchConfig, WorkerConfig
 from cairn.dispatcher.contracts import parse_json_output, validate_explore_payload
-from cairn.dispatcher.prompting import load_prompt, render_prompt
+from cairn.dispatcher.prompting import format_steering, load_prompt, render_prompt
 from cairn.dispatcher.protocol.client import CairnClient
 from cairn.dispatcher.runtime.cancellation import TaskCancellation
 from cairn.dispatcher.runtime.containers import ContainerManager
@@ -14,10 +14,16 @@ from cairn.dispatcher.tasks.common import (
     best_effort_release,
     cancel_reason,
     did_timeout,
+    driver_streams_json_events,
+    fetch_pending_steering,
+    finish_worker_activity,
+    mark_steering_delivered,
     project_allows_conclude_fallback,
     preview,
     run_worker_process,
+    start_worker_activity,
     task_healthcheck_enabled,
+    worker_accepted_prompt,
     write_conclude_result,
     write_graph_snapshot_reference,
 )
@@ -86,6 +92,7 @@ def run_explore_task(
                 best_effort_release(client, project.project.id, intent.id, worker.name)
                 return "unhealthy"
 
+        steering = fetch_pending_steering(client, project.project.id, intent_id=intent.id)
         prompt = render_prompt(
             load_prompt(config.runtime.prompt_group, "explore.md"),
             {
@@ -97,6 +104,7 @@ def run_explore_task(
                 ),
                 "intent_id": intent.id,
                 "intent_description": intent.description,
+                "steering": format_steering(steering),
             },
         )
 
@@ -104,18 +112,44 @@ def run_explore_task(
         execute = driver.build_execute(worker, prompt, session)
         session = execute.session
         execute_started = time.perf_counter()
-        first = _run_process(
-            container_manager,
-            container_name,
-            worker,
-            execute.argv,
-            phase="explore_execute",
-            timeout=config.tasks.explore.timeout,
-            lease=lease,
-            cancellation=cancellation,
+        activity = start_worker_activity(
+            client,
+            project.project.id,
+            worker.name,
+            task="explore",
+            intent_id=intent.id,
+            intent_description=intent.description,
+        )
+        try:
+            first = _run_process(
+                container_manager,
+                container_name,
+                worker,
+                execute.argv,
+                phase="explore_execute",
+                timeout=config.tasks.explore.timeout,
+                lease=lease,
+                cancellation=cancellation,
+                on_stdout_line=activity.feed_line
+                if activity is not None and driver_streams_json_events(driver)
+                else None,
+            )
+        except BaseException as exc:
+            finish_worker_activity(activity, None, error=f"{type(exc).__name__}: {exc}")
+            raise
+        try:
+            session = driver.extract_session(session, first.stdout, first.stderr)
+        finally:
+            finish_worker_activity(activity, first, session=session)
+        mark_steering_delivered(
+            client,
+            project.project.id,
+            steering,
+            worker.name,
+            run=session,
+            accepted=worker_accepted_prompt(first),
         )
         execute_ms = int((time.perf_counter() - execute_started) * 1000)
-        session = driver.extract_session(session, first.stdout, first.stderr)
         cancelled = cancel_reason(first, cancellation)
         if cancelled is not None:
             LOG.info(
@@ -305,16 +339,32 @@ def _try_conclude_fallback(
     conclude_argv = driver.build_conclude(worker, prompt, session)
     LOG.info("starting conclude fallback project=%s intent=%s worker=%s", project_id, intent.id, worker.name)
     conclude_started = time.perf_counter()
-    result = _run_process(
-        container_manager,
-        container_name,
-        worker,
-        conclude_argv,
-        phase="explore_conclude",
-        timeout=config.tasks.explore.conclude_timeout,
-        lease=lease,
-        cancellation=cancellation,
+    activity = start_worker_activity(
+        client,
+        project_id,
+        worker.name,
+        task="explore_conclude",
+        intent_id=intent.id,
+        intent_description=intent.description,
     )
+    try:
+        result = _run_process(
+            container_manager,
+            container_name,
+            worker,
+            conclude_argv,
+            phase="explore_conclude",
+            timeout=config.tasks.explore.conclude_timeout,
+            lease=lease,
+            cancellation=cancellation,
+            on_stdout_line=activity.feed_line
+            if activity is not None and driver_streams_json_events(driver)
+            else None,
+        )
+    except BaseException as exc:
+        finish_worker_activity(activity, None, error=f"{type(exc).__name__}: {exc}")
+        raise
+    finish_worker_activity(activity, result, session=session)
     conclude_ms = int((time.perf_counter() - conclude_started) * 1000)
     cancelled = cancel_reason(result, cancellation)
     if cancelled is not None:
@@ -394,6 +444,7 @@ def _run_process(
     timeout: int,
     lease: HeartbeatLease,
     cancellation: TaskCancellation,
+    on_stdout_line=None,
 ):
     return run_worker_process(
         container_manager,
@@ -404,4 +455,5 @@ def _run_process(
         timeout_seconds=timeout,
         lease=lease,
         cancellation=cancellation,
+        on_stdout_line=on_stdout_line,
     )

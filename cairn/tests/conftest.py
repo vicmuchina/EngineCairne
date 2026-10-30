@@ -116,6 +116,54 @@ class FakeClient:
     created_intents: list[tuple[str, list[str], str, str]] = field(default_factory=list)
     released: list[tuple[str, str, str]] = field(default_factory=list)
     released_reasons: list[tuple[str, str]] = field(default_factory=list)
+    steering: list[dict] = field(default_factory=list)
+    delivered_steering: list[tuple[str, int, str]] = field(default_factory=list)
+    activities: list[dict] = field(default_factory=list)
+    activity_seq: int = 0
+
+    def pending_steering(
+        self, _project_id: str, _intent_id: str | None = None, *, project_only: bool = False
+    ) -> list[dict]:
+        return list(self.steering)
+
+    def deliver_steering(
+        self, project_id: str, steering_id: int, worker: str, run: str | None = None
+    ) -> ApiResult:
+        self.delivered_steering.append((project_id, steering_id, worker))
+        return ApiResult(200, {})
+
+    def record_activity(self, project_id: str, **fields) -> ApiResult:
+        self.activity_seq += 1
+        payload = {"project_id": project_id, "id": f"event:{self.activity_seq}", **fields}
+        self.activities.append(payload)
+        return ApiResult(201, {"id": payload["id"], **fields})
+
+    def update_worker_activity(self, project_id: str, activity_id: int, **fields) -> ApiResult:
+        for payload in reversed(self.activities):
+            if payload.get("id") != f"event:{activity_id}":
+                continue
+            if fields.get("status") is not None:
+                payload["status"] = fields["status"]
+            if fields.get("description") is not None:
+                payload["description"] = fields["description"]
+            metadata = dict(payload.get("metadata") or {})
+            metadata.update(fields.get("metadata") or {})
+            payload["metadata"] = metadata
+            break
+        self.activities.append(
+            {"project_id": project_id, "kind": "update", "activity_id": activity_id, **fields}
+        )
+        return ApiResult(200, {})
+
+    def close_worker_run(self, project_id: str, run_id: str, **fields) -> ApiResult:
+        terminal = {"success": "done"}.get(fields.get("status"), fields.get("status"))
+        for payload in self.activities:
+            if payload.get("run_id") == run_id and payload.get("status") in ("running", "streaming"):
+                payload["status"] = terminal
+        self.activities.append(
+            {"project_id": project_id, "kind": "close", "run_id": run_id, **fields}
+        )
+        return ApiResult(200, {})
 
     def get_project(self, _project_id: str) -> ProjectDetail:
         return self.project

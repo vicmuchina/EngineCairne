@@ -17,7 +17,7 @@ from cairn.dispatcher.runtime.cancellation import TaskCancellation
 from cairn.dispatcher.runtime.containers import ContainerManager
 from cairn.dispatcher.runtime.local_backend import LocalBackend
 from cairn.dispatcher.runtime.startup_healthcheck import format_failure_summary, run_startup_healthchecks
-from cairn.dispatcher.scheduler.worker_select import choose_worker
+from cairn.dispatcher.scheduler.worker_select import choose_worker, select_unclaimed_intent
 from cairn.dispatcher.workers.registry import get_driver
 from cairn.dispatcher.tasks.bootstrap import run_bootstrap_task
 from cairn.dispatcher.tasks.explore import run_explore_task
@@ -313,7 +313,7 @@ class DispatcherLoop:
                 sorted(running_intent_ids),
             )
         if unclaimed_intents:
-            newest = max(unclaimed_intents, key=lambda i: i.created_at)
+            newest = select_unclaimed_intent(unclaimed_intents)
             export_yaml = self.client.export_project(summary.id)
             return self._dispatch_explore(project, export_yaml, newest)
         if project.project.reason is not None:
@@ -424,6 +424,13 @@ class DispatcherLoop:
         )
         self.runtime_project_ids.add(project.project.id)
         self._clear_project_log_state(project.project.id)
+        self._record_activity(
+            project.project.id,
+            title=f"reason worker {worker.name} started",
+            status="running",
+            actor=worker.name,
+            metadata={"task": "reason", "trigger": trigger},
+        )
         LOG.info("dispatched reason project=%s worker=%s trigger=%s", project.project.id, worker.name, trigger)
         return True
 
@@ -482,6 +489,13 @@ class DispatcherLoop:
         self.futures[future] = RunningTask(project.project.id, "bootstrap", worker.name, cancellation, intent_id=intent.id)
         self.runtime_project_ids.add(project.project.id)
         self._clear_project_log_state(project.project.id)
+        self._record_activity(
+            project.project.id,
+            title=f"bootstrap worker {worker.name} started",
+            status="running",
+            actor=worker.name,
+            metadata={"task": "bootstrap", "intent_id": intent.id},
+        )
         LOG.info("dispatched bootstrap project=%s intent=%s worker=%s", project.project.id, intent.id, worker.name)
         return True
 
@@ -541,6 +555,13 @@ class DispatcherLoop:
         self.futures[future] = RunningTask(project.project.id, "explore", worker.name, cancellation, intent_id=intent.id)
         self.runtime_project_ids.add(project.project.id)
         self._clear_project_log_state(project.project.id)
+        self._record_activity(
+            project.project.id,
+            title=f"explore worker {worker.name} started",
+            status="running",
+            actor=worker.name,
+            metadata={"task": "explore", "intent_id": intent.id},
+        )
         LOG.info("dispatched explore project=%s intent=%s worker=%s", project.project.id, intent.id, worker.name)
         return True
 
@@ -723,6 +744,13 @@ class DispatcherLoop:
             task = self.futures.pop(future)
             try:
                 outcome = future.result()
+                self._record_activity(
+                    task.project_id,
+                    title=f"{task.task_type} worker {task.worker_name} finished ({outcome})",
+                    status=outcome,
+                    actor=task.worker_name,
+                    metadata={"task": task.task_type, "intent_id": task.intent_id, "outcome": outcome},
+                )
                 if outcome == "cancelled":
                     LOG.info(
                         "task cancelled project=%s task=%s worker=%s",
@@ -876,6 +904,32 @@ class DispatcherLoop:
                 summary.hint_count,
                 open_intent_count,
             )
+
+    def _record_activity(
+        self,
+        project_id: str,
+        *,
+        title: str,
+        status: str | None = None,
+        actor: str | None = None,
+        description: str | None = None,
+        metadata: dict | None = None,
+    ) -> None:
+        record = getattr(self.client, "record_activity", None)
+        if record is None:
+            return
+        try:
+            record(
+                project_id,
+                kind="worker",
+                title=title,
+                description=description,
+                actor=actor,
+                status=status,
+                metadata=metadata or {},
+            )
+        except Exception:  # pragma: no cover - activity logging must never break dispatch
+            LOG.warning("activity write failed project=%s", project_id, exc_info=True)
 
     def _best_effort_release(self, project_id: str, intent_id: str, worker_name: str) -> None:
         response = self.client.release(project_id, intent_id, worker_name)

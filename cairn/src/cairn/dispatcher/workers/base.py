@@ -28,6 +28,10 @@ class WorkerDriver(abc.ABC):
         """
         return None
 
+    def streams_json_events(self) -> bool:
+        """True when the worker's stdout is a JSONL event stream we can parse live."""
+        return False
+
     def prepare_session(self) -> str | None:
         return None
 

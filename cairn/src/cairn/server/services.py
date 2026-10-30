@@ -162,6 +162,7 @@ def intent_to_model(conn: sqlite3.Connection, row: sqlite3.Row, project_id: str)
         last_heartbeat_at=row["last_heartbeat_at"],
         created_at=row["created_at"],
         concluded_at=row["concluded_at"],
+        priority=row["priority"] if "priority" in row.keys() else 0,
     )
 
 

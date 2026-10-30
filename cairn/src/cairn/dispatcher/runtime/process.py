@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import codecs
+from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass
 import logging
@@ -42,7 +44,13 @@ class ExecProcess(Protocol):
 
 
 class ManagedProcess:
-    def __init__(self, container: Container, command: list[str], env: dict[str, str]):
+    def __init__(
+        self,
+        container: Container,
+        command: list[str],
+        env: dict[str, str],
+        on_stdout_line: Callable[[str], None] | None = None,
+    ):
         self.command = command
         self.env = env
         self._container = container
@@ -56,6 +64,10 @@ class ManagedProcess:
         self._cancel_reason: str | None = None
         self._read_error: str | None = None
         self._done = threading.Event()
+        self._on_stdout_line = on_stdout_line
+        self._stdout_decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+        self._stderr_decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+        self._stdout_pending = ""
 
     def start(self) -> None:
         exec_info = self._api.exec_create(
@@ -128,16 +140,57 @@ class ManagedProcess:
             )
             for chunk in stream:
                 stdout, stderr = self._split_chunk(chunk)
-                if stdout:
-                    self._stdout.append(stdout)
-                if stderr:
-                    self._stderr.append(stderr)
+                if stdout is not None:
+                    self._consume_stdout(stdout)
+                if stderr is not None:
+                    self._consume_stderr(stderr)
         except DockerException as exc:
             self._read_error = str(exc)
         finally:
+            self._flush_stream_decoders()
             self._close_stream(stream)
             self._returncode = self._resolve_exit_code()
             self._done.set()
+
+    def _consume_stdout(self, chunk: bytes | str) -> None:
+        text = self._decode_incremental(self._stdout_decoder, chunk)
+        if not text:
+            return
+        # Final stdout capture is the concatenation of the decoded stream, exactly as
+        # before, but decoded incrementally so split UTF-8 never becomes U+FFFD.
+        self._stdout.append(text)
+        if self._on_stdout_line is None:
+            return
+        self._stdout_pending += text
+        parts = self._stdout_pending.split("\n")
+        self._stdout_pending = parts[-1]
+        for line in parts[:-1]:
+            self._emit_stdout_line(line)
+
+    def _consume_stderr(self, chunk: bytes | str) -> None:
+        text = self._decode_incremental(self._stderr_decoder, chunk)
+        if text:
+            self._stderr.append(text)
+
+    def _flush_stream_decoders(self) -> None:
+        tail = self._stdout_decoder.decode(b"", final=True)
+        if tail:
+            self._stdout.append(tail)
+            self._stdout_pending += tail
+        if self._on_stdout_line is not None and self._stdout_pending:
+            # A final line without a trailing LF is still a complete record.
+            self._emit_stdout_line(self._stdout_pending)
+        self._stdout_pending = ""
+        stderr_tail = self._stderr_decoder.decode(b"", final=True)
+        if stderr_tail:
+            self._stderr.append(stderr_tail)
+
+    def _emit_stdout_line(self, line: str) -> None:
+        assert self._on_stdout_line is not None
+        try:
+            self._on_stdout_line(line[:-1] if line.endswith("\r") else line)
+        except Exception:  # pragma: no cover - a callback must never kill the reader
+            LOG.warning("stdout line callback failed", exc_info=True)
 
     @staticmethod
     def _close_stream(stream: Any | None) -> None:
@@ -189,17 +242,13 @@ class ManagedProcess:
             LOG.warning("failed to kill container exec pid=%s container=%s error=%s", pid, self._container.name, last_error)
 
     @staticmethod
-    def _split_chunk(chunk: Any) -> tuple[str, str]:
+    def _split_chunk(chunk: Any) -> tuple[bytes | str | None, bytes | str | None]:
         if isinstance(chunk, tuple):
-            stdout, stderr = chunk
-        else:
-            stdout, stderr = chunk, None
-        return ManagedProcess._decode(stdout), ManagedProcess._decode(stderr)
+            return chunk
+        return chunk, None
 
     @staticmethod
-    def _decode(chunk: bytes | str | None) -> str:
-        if chunk is None:
-            return ""
-        if isinstance(chunk, bytes):
-            return chunk.decode("utf-8", errors="replace")
-        return chunk
+    def _decode_incremental(decoder, chunk: bytes | str) -> str:
+        if isinstance(chunk, str):
+            return chunk
+        return decoder.decode(chunk, final=False)

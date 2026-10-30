@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import shutil
+from collections.abc import Callable
 from pathlib import Path
 
 from cairn.dispatcher.config import LocalConfig
@@ -45,6 +46,7 @@ class LocalBackend:
         command: list[str],
         timeout_seconds: int | None = None,
         kill_after_seconds: int = 5,
+        on_stdout_line: Callable[[str], None] | None = None,
     ) -> LocalProcess:
         merged_env = {**os.environ, **(env or {})}
         return LocalProcess(
@@ -53,6 +55,7 @@ class LocalBackend:
             env=merged_env,
             timeout_seconds=timeout_seconds,
             term_grace_seconds=kill_after_seconds,
+            on_stdout_line=on_stdout_line,
         )
 
     def write_text_file(self, container_name: str, path: str, content: str) -> None:

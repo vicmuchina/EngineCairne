@@ -18,6 +18,9 @@ class PiDriver(WorkerDriver):
     def local_binary(self) -> str | None:
         return "pi"
 
+    def streams_json_events(self) -> bool:
+        return True
+
     def check_health(self, worker: WorkerConfig, *, timeout: float) -> HealthResult:
         env = worker.env
         base = env["PI_BASE_URL"].rstrip("/")

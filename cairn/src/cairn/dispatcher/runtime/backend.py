@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Protocol, runtime_checkable
 
 from cairn.dispatcher.runtime.process import ExecProcess
@@ -26,6 +27,7 @@ class ExecutionBackend(Protocol):
         command: list[str],
         timeout_seconds: int | None = None,
         kill_after_seconds: int = 5,
+        on_stdout_line: Callable[[str], None] | None = None,
     ) -> ExecProcess: ...
 
     def write_text_file(self, container_name: str, path: str, content: str) -> None: ...
