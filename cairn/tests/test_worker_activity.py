@@ -858,3 +858,117 @@ def test_worker_exclude_task_keeps_explore_sessions_visible(client: TestClient) 
     sessions = client.get(f"/projects/{project_id}/sessions").json()
     worker_keys = [s["key"] for s in sessions["sessions"] if s["role"] == "worker"]
     assert "worker:run-explore" in worker_keys, worker_keys
+
+
+# ------------------------------------------------------- interruption report (v2)
+
+
+def test_recorder_writes_interruption_row_before_terminal_row() -> None:
+    """A cancelled run explains itself: one worker_interruption row, then the close."""
+    client = FakeClient(make_project())
+    recorder = WorkerActivityRecorder(
+        client, project_id="proj_001", worker="pi-1", task="explore",
+        intent_id="i001", intent_description="investigate",
+    )
+    recorder.start()
+    for line in _jsonl(
+        {"type": "message_start", "message": {"role": "assistant"}},
+        {"type": "tool_execution_start", "toolCallId": "call_open", "toolName": "bash",
+         "args": {"command": "sleep 100"}},
+    ):
+        recorder.feed_line(line)
+    recorder.finish(result=ProcessResult(143, "", "", cancelled=True, cancel_reason="stopped"))
+
+    kinds = [a.get("kind") for a in client.activities]
+    interruption = client.activities[kinds.index("worker_interruption")]
+    assert kinds.index("worker_interruption") < kinds.index("close")
+    assert interruption["status"] == "done"
+    assert interruption["title"] == "Worker run interrupted"
+    assert interruption["actor"] == "pi-1"
+    assert interruption["run_id"] == recorder.run_id
+    description = interruption["description"]
+    assert description.startswith("The run was interrupted: paused_by_user.")
+    assert "Terminal state: cancelled." in description
+    assert "Executed: 1 model turns. This run took: " in description
+    assert "Cumulative tokens: input 0 / output 0 / cache read 0." in description
+    assert 'Tool running at interruption: bash {"command": "sleep 100"} (returned no result).' in description
+    metadata = interruption["metadata"]
+    assert metadata["reason"] == "paused_by_user"
+    assert metadata["terminal_state"] == "cancelled"
+    assert metadata["turns"] == 1
+    assert isinstance(metadata["duration_ms"], int)
+    assert metadata["usage"] == {"input": 0, "output": 0, "cache_read": 0}
+    assert metadata["tool"]["name"] == "bash"
+    assert metadata["tool"]["call_id"] == "call_open"
+    assert metadata["run_id"] == recorder.run_id
+
+
+def test_recorder_interruption_row_for_timeout_and_no_open_tool() -> None:
+    client = FakeClient(make_project())
+    recorder = WorkerActivityRecorder(
+        client, project_id="proj_001", worker="pi-1", task="bootstrap"
+    )
+    recorder.start()
+    for line in _jsonl(
+        {"type": "message_start", "message": {"role": "assistant"}},
+        {"type": "message_end", "message": {"role": "assistant",
+                                            "content": [{"type": "text", "text": "working"}],
+                                            "stopReason": "stop",
+                                            "usage": {"input": 11, "output": 7, "cacheRead": 3}}},
+    ):
+        recorder.feed_line(line)
+    recorder.finish(result=ProcessResult(124, "", "", timed_out=True))
+
+    interruption = next(a for a in client.activities if a.get("kind") == "worker_interruption")
+    assert interruption["metadata"]["reason"] == "timeout"
+    assert interruption["metadata"]["tool"] is None
+    assert interruption["metadata"]["usage"] == {"input": 11, "output": 7, "cache_read": 3}
+    assert "Tool running at interruption: none" in interruption["description"]
+    close = next(a for a in client.activities if a.get("kind") == "close")
+    assert close["status"] == "timeout"
+
+
+def test_parser_interruption_snapshot_reports_open_tool_and_turns() -> None:
+    parser = PiWorkerEventParser("pi-1")
+    for line in _jsonl(
+        {"type": "message_start", "message": {"role": "assistant"}},
+        {"type": "message_update", "assistantMessageEvent": {
+            "type": "thinking_start", "contentIndex": 0}},
+        {"type": "message_update", "assistantMessageEvent": {
+            "type": "thinking_delta", "contentIndex": 0, "delta": "planning the next step"}},
+        {"type": "tool_execution_start", "toolCallId": "c1", "toolName": "read",
+         "args": {"path": "x"}},
+        {"type": "tool_execution_end", "toolCallId": "c1", "toolName": "read",
+         "result": {"content": [{"type": "text", "text": "body"}]}, "isError": False},
+        {"type": "tool_execution_start", "toolCallId": "c2", "toolName": "bash",
+         "args": {"command": "sleep 9"}},
+    ):
+        parser.feed_line(line)
+    snapshot = parser.interruption_snapshot()
+    assert snapshot["turns"] == 1
+    assert snapshot["tool"]["name"] == "bash"
+    assert snapshot["tool"]["call_id"] == "c2"
+    assert "planning the next step" in snapshot["thinking"]
+
+
+def test_session_activities_map_interruption_rows(client: TestClient) -> None:
+    """`worker_interruption` surfaces in the session transcript as `interruption`."""
+    project_id = _project(client)
+    _activity(
+        client, project_id,
+        kind="worker_run", title="explore worker pi-1 started", status="running",
+        actor="pi-1", run_id="run-cancelled",
+        metadata={"task": "explore", "intent_id": "i001", "worker": "pi-1",
+                  "started_at": "2026-10-30T00:00:00Z"},
+    )
+    _activity(
+        client, project_id,
+        kind="worker_interruption", title="Worker run interrupted", status="done",
+        actor="pi-1", run_id="run-cancelled",
+        description="The run was interrupted: paused_by_user. Terminal state: cancelled.",
+        metadata={"reason": "paused_by_user", "terminal_state": "cancelled", "turns": 3},
+    )
+    page = client.get(f"/projects/{project_id}/sessions/worker:run-cancelled/activities").json()
+    assert [item["kind"] for item in page["items"]] == ["interruption"]
+    assert page["items"][0]["content"].startswith("The run was interrupted")
+    assert page["items"][0]["metadata"]["reason"] == "paused_by_user"

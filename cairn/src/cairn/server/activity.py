@@ -56,8 +56,10 @@ GRAPH_FEED_KINDS = ("fact", "goal", "intent", "hint")
 # transcript pi actually emitted. They live in project_activity with a non-null run_id and
 # are served both by the generic /activity feed and by /projects/{id}/workers.
 WORKER_RUN = "worker_run"
+WORKER_INTERRUPTION = "worker_interruption"
 WORKER_CHILD_KINDS = (
     "worker_thinking",
+    "worker_interruption",
     "tool_call",
     "tool_result",
     "worker_message",

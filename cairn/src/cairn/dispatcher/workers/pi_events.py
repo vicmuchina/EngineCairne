@@ -180,8 +180,39 @@ class PiWorkerEventParser:
         self._tools: dict[str, _Tool] = {}
         self._error_index = 0
         self._output_index = 0
+        # Interruption report state: how many assistant turns pi started and the last
+        # thinking text it produced. Both are needed when a run is cancelled/timed out
+        # before a final message, and neither is derivable from the persisted rows later
+        # (the last thinking block may still be streaming when the run is killed).
+        self._turns = 0
+        self._last_thinking = ""
 
     # -- public -----------------------------------------------------------
+    def interruption_snapshot(self) -> dict[str, Any]:
+        """Return the run state needed by the ``worker_interruption`` row.
+
+        Deliberately read-only and cheap: it is called from ``finish`` while the process
+        is already gone, so it must never block on I/O or raise on partial state.
+        """
+        tool = None
+        for candidate in reversed(list(self._tools.values())):
+            if not candidate.result_text:
+                tool = candidate
+                break
+        return {
+            "turns": int(self._turns),
+            "tool": (
+                None
+                if tool is None
+                else {
+                    "name": tool.name,
+                    "call_id": tool.call_id,
+                    "input": _clip(tool.input_text, MAX_METADATA_TEXT),
+                }
+            ),
+            "thinking": _clip(self._last_thinking, MAX_METADATA_TEXT) or "",
+        }
+
     def feed_line(self, line: str) -> list[WorkerEmission]:
         text = line.strip()
         if not text:
@@ -268,6 +299,7 @@ class PiWorkerEventParser:
         # A new assistant message is a new block sequence; any thinking block left open
         # by a malformed stream belongs to the previous message.
         self._thinking = {}
+        self._turns += 1
         return []
 
     def _ensure_message(self) -> list[WorkerEmission]:
@@ -342,6 +374,7 @@ class PiWorkerEventParser:
                 if isinstance(ame.get("content"), str):
                     accum.text = ame["content"]
                 self._thinking.pop(index, None)
+                self._last_thinking = accum.text
                 return [self._thinking_emission(index, accum.text, "done", update=True)]
             return []
         if atype == "error":
@@ -358,6 +391,8 @@ class PiWorkerEventParser:
         return []
 
     def _thinking_emission(self, index: int, text: str, status: str, *, update: bool) -> WorkerEmission:
+        if text:
+            self._last_thinking = text
         return WorkerEmission(
             slot=f"thinking:{index}",
             kind="worker_thinking",

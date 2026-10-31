@@ -339,6 +339,32 @@ class WorkerRunList(BaseModel):
     active_count: int = 0
 
 
+class SessionRunPhase(BaseModel):
+    """One dispatcher run that belongs to a merged worker session (provenance)."""
+
+    run_id: str
+    task: str | None = None
+    status: str
+    started_at: str | None = None
+    finished_at: str | None = None
+    duration_ms: int | None = None
+    usage: TokenUsage = Field(default_factory=TokenUsage)
+    model: str | None = None
+
+
+class SessionInterruption(BaseModel):
+    """Structured interruption report attached to an interrupted planner round."""
+
+    reason: str
+    terminal_state: str
+    turns: int = 0
+    duration_ms: int | None = None
+    usage: dict = Field(default_factory=dict)
+    tool: dict | None = None
+    text: str = ""
+    run_id: str | None = None
+
+
 class SessionItem(BaseModel):
     key: str
     role: str
@@ -358,6 +384,17 @@ class SessionItem(BaseModel):
     duration_ms: int | None = None
     model: str | None = None
     counts: WorkerRunCounts | None = None
+    # --- sessions v2 (all additive) -------------------------------------
+    intent_description: str | None = None
+    usage: TokenUsage | None = None
+    queued: bool = False
+    runs: list[SessionRunPhase] = Field(default_factory=list)
+    phases: dict[str, str | None] | None = None
+    interrupted: bool = False
+    interrupt_reason: str | None = None
+    round: int | None = None
+    summary: dict | None = None
+    summary_text: str | None = None
 
 
 class SessionList(BaseModel):
@@ -401,6 +438,13 @@ class SessionActivityPage(BaseModel):
     items: list[SessionActivityItem] = Field(default_factory=list)
     has_more: bool = False
     earliest_seq: int | None = None
+
+
+class ProjectReport(BaseModel):
+    project_id: str
+    generated_at: str
+    markdown: str
+    counts: dict = Field(default_factory=dict)
 
 
 class ClaimReconcileRequest(BaseModel):

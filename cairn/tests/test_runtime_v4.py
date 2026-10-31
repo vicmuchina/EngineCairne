@@ -621,3 +621,363 @@ def test_sse_stream_emits_activity_then_heartbeat(client: TestClient) -> None:
     assert all(frame.startswith("id: ") for frame in activity_frames)
     assert all(event["seq"] == event["activity"]["seq"] for event in decoded)
     assert any(chunk == ": heartbeat\n\n" for chunk in chunks)
+
+
+# ------------------------------------------------------------------ sessions v2
+
+
+def _seed_pair(
+    client: TestClient,
+    project_id: str,
+    *,
+    intent_id: str = "i001",
+    description: str = "investigate the thing",
+    execute_status: str = "timeout",
+    conclude_status: str = "success",
+) -> tuple[str, str]:
+    """Seed one execute + one conclude run for the same intent (Artex evidence shape)."""
+    execute = f"run-exec-{intent_id}"
+    conclude = f"run-conc-{intent_id}"
+    started_execute = "2026-10-30T00:00:00Z"
+    finished_execute = "2026-10-30T00:05:00Z"
+    started_conclude = "2026-10-30T00:05:10Z"
+    finished_conclude = "2026-10-30T00:05:15Z"
+    _activity(
+        client,
+        project_id,
+        kind="worker_run",
+        title="bootstrap worker pi-1 started",
+        status="running",
+        actor="pi-1",
+        run_id=execute,
+        metadata={
+            "task": "bootstrap",
+            "worker": "pi-1",
+            "intent_id": intent_id,
+            "intent_description": description,
+            "started_at": started_execute,
+            "usage": {"input": 100, "output": 10, "cacheRead": 50, "cost": 0.25},
+            "model": "model-old",
+        },
+    )
+    _activity(
+        client,
+        project_id,
+        kind="tool_call",
+        title="Tool bash",
+        status="done",
+        actor="pi-1",
+        run_id=execute,
+        description='{"command": "ls"}',
+        metadata={"tool_name": "bash", "tool_call_id": "c1", "tool_input": '{"command": "ls"}'},
+    )
+    _activity(
+        client,
+        project_id,
+        kind="worker_run",
+        title=f"bootstrap worker pi-1 finished ({execute_status})",
+        status=execute_status,
+        actor="pi-1",
+        run_id=execute,
+        metadata={
+            "task": "bootstrap",
+            "worker": "pi-1",
+            "intent_id": intent_id,
+            "intent_description": description,
+            "started_at": started_execute,
+            "finished_at": finished_execute,
+            "duration_ms": 300_000,
+            "usage": {"input": 100, "output": 10, "cacheRead": 50, "cost": 0.25},
+        },
+    )
+    _activity(
+        client,
+        project_id,
+        kind="worker_run",
+        title="bootstrap_conclude worker pi-1 started",
+        status="running",
+        actor="pi-1",
+        run_id=conclude,
+        metadata={
+            "task": "bootstrap_conclude",
+            "worker": "pi-1",
+            "intent_id": intent_id,
+            "intent_description": description,
+            "started_at": started_conclude,
+            "usage": {"input": 7, "output": 3, "cacheRead": 5, "cost": 0.05},
+            "model": "model-new",
+        },
+    )
+    _activity(
+        client,
+        project_id,
+        kind="worker_message",
+        title="worker pi-1 message",
+        status="done",
+        actor="pi-1",
+        run_id=conclude,
+        description="the final fact",
+        metadata={"stop_reason": "stop"},
+    )
+    _activity(
+        client,
+        project_id,
+        kind="worker_run",
+        title=f"bootstrap_conclude worker pi-1 finished ({conclude_status})",
+        status=conclude_status,
+        actor="pi-1",
+        run_id=conclude,
+        metadata={
+            "task": "bootstrap_conclude",
+            "worker": "pi-1",
+            "intent_id": intent_id,
+            "intent_description": description,
+            "started_at": started_conclude,
+            "finished_at": finished_conclude,
+            "duration_ms": 5_000,
+            "usage": {"input": 7, "output": 3, "cacheRead": 5, "cost": 0.05},
+        },
+    )
+    return execute, conclude
+
+
+def test_sessions_merge_execute_and_conclude_into_one_worker(client: TestClient) -> None:
+    project_id = _project(client)
+    execute, conclude = _seed_pair(client, project_id)
+
+    payload = client.get(f"/projects/{project_id}/sessions").json()
+    workers = [s for s in payload["sessions"] if s["role"] == "worker"]
+    assert len(workers) == 1, workers
+    worker = workers[0]
+    assert worker["key"] == f"worker:{execute}"
+    assert worker["run_id"] == execute
+    assert worker["status"] == "success"
+    assert worker["phases"] == {"execute": "timeout", "conclude": "success"}
+    assert worker["interrupted"] is False
+    assert worker["interrupt_reason"] is None
+    assert worker["task"] == "bootstrap"
+    assert worker["intent_id"] == "i001"
+    assert worker["title"].startswith(f"#{execute[:8]} ")
+    assert "investigate the thing" in worker["title"]
+    # Summed over both phases.
+    assert worker["tokens"] == {"input": 107, "cache_read": 55, "output": 13, "cost": 0.3}
+    assert worker["duration_ms"] == 305_000
+    assert worker["model"] == "model-new"
+    assert worker["counts"]["tool_calls"] == 1
+    assert worker["counts"]["messages"] == 1
+    assert [run["task"] for run in worker["runs"]] == ["bootstrap", "bootstrap_conclude"]
+    assert [run["status"] for run in worker["runs"]] == ["timeout", "success"]
+    assert worker["started_at"] == "2026-10-30T00:00:00Z"
+    assert worker["finished_at"] == "2026-10-30T00:05:15Z"
+
+    # Either phase's run id addresses the merged transcript, ordered by activity id.
+    first = client.get(f"/projects/{project_id}/sessions/worker:{execute}/activities").json()
+    second = client.get(f"/projects/{project_id}/sessions/worker:{conclude}/activities").json()
+    assert first == second
+    assert [item["kind"] for item in first["items"]] == ["tool_call", "message"]
+    assert first["items"][0]["seq"] < first["items"][1]["seq"]
+
+
+def test_sessions_interrupted_worker_keeps_timeout_reason(client: TestClient) -> None:
+    project_id = _project(client)
+    _seed_pair(client, project_id, conclude_status="cancelled")
+    worker = next(
+        s
+        for s in client.get(f"/projects/{project_id}/sessions").json()["sessions"]
+        if s["role"] == "worker"
+    )
+    assert worker["status"] == "timeout"
+    assert worker["phases"] == {"execute": "timeout", "conclude": "cancelled"}
+    assert worker["interrupted"] is True
+    assert worker["interrupt_reason"] == "timeout"
+
+
+def test_sessions_list_queued_intents_and_empty_transcript(client: TestClient) -> None:
+    project_id = _project(client)
+    with db.get_conn() as conn:
+        conn.execute(
+            "INSERT INTO intents (id, project_id, description, creator, worker, created_at) "
+            "VALUES ('i010', ?, 'queued work', 'copilot', NULL, ?)",
+            (project_id, _now(-20)),
+        )
+        conn.execute(
+            "INSERT INTO intents (id, project_id, description, creator, worker, created_at) "
+            "VALUES ('i-bootstrap', ?, 'bootstrap', 'dispatcher.bootstrap', NULL, ?)",
+            (project_id, _now(-30)),
+        )
+        conn.execute(
+            "INSERT INTO intents (id, project_id, description, creator, worker, created_at) "
+            "VALUES ('i-claimed', ?, 'claimed work', 'copilot', 'pi-1', ?)",
+            (project_id, _now(-10)),
+        )
+
+    payload = client.get(f"/projects/{project_id}/sessions").json()
+    queued = [s for s in payload["sessions"] if s.get("queued")]
+    assert [s["key"] for s in queued] == ["queued:i010"]
+    entry = queued[0]
+    assert entry["role"] == "worker"
+    assert entry["status"] == "queued"
+    assert entry["title"].startswith("#queued ")
+    assert entry["live"] is False
+    assert entry["intent_id"] == "i010"
+    assert entry["tokens"] == {"input": 0, "cache_read": 0, "output": 0, "cost": 0.0}
+    assert entry["counts"]["tool_calls"] == 0
+    assert entry["last_activity_at"] is None
+    assert entry["started_at"] is None
+    # The bootstrap intent and already-claimed intents are not queued.
+    assert all("i-bootstrap" not in s["key"] for s in queued)
+    assert all("i-claimed" not in s["key"] for s in queued)
+
+    transcript = client.get(f"/projects/{project_id}/sessions/queued:i010/activities").json()
+    assert transcript["items"] == []
+    assert transcript["has_more"] is False
+
+    # Completed projects have no queued lane.
+    with db.get_conn() as conn:
+        conn.execute("UPDATE projects SET status = 'completed' WHERE id = ?", (project_id,))
+    payload = client.get(f"/projects/{project_id}/sessions").json()
+    assert not [s for s in payload["sessions"] if s.get("queued")]
+
+
+def _seed_reason_round(
+    client: TestClient, project_id: str, run_id: str, message: str, *, status: str = "success"
+) -> None:
+    _activity(
+        client,
+        project_id,
+        kind="worker_run",
+        title="reason worker pi-1 started",
+        status="running",
+        actor="pi-1",
+        run_id=run_id,
+        metadata={"task": "reason", "worker": "pi-1"},
+    )
+    if message:
+        _activity(
+            client,
+            project_id,
+            kind="worker_message",
+            title="worker pi-1 message",
+            status="done",
+            actor="pi-1",
+            run_id=run_id,
+            description=message,
+        )
+    _activity(
+        client,
+        project_id,
+        kind="worker_run",
+        title=f"reason worker pi-1 finished ({status})",
+        status=status,
+        actor="pi-1",
+        run_id=run_id,
+        metadata={
+            "task": "reason",
+            "worker": "pi-1",
+            "duration_ms": 1_000,
+            "finished_at": _now(-1),
+        },
+    )
+
+
+def test_plan_session_exposes_round_and_parses_summary_shapes(client: TestClient) -> None:
+    project_id = _project(client)
+    _seed_reason_round(
+        client,
+        project_id,
+        "run-r1",
+        'thinking…\n```json\n{"accepted": true, "data": {"intents": '
+        '[{"from": ["f001"], "description": "probe the endpoint"}]}}\n```',
+    )
+    plan = client.get(f"/projects/{project_id}/sessions").json()["sessions"][1]
+    assert plan["key"] == "plan"
+    assert plan["round"] == 1
+    assert plan["summary"]["kind"] == "intents"
+    assert plan["summary"]["count"] == 1
+    assert plan["summary"]["intents"] == [{"from": ["f001"], "description": "probe the endpoint"}]
+    assert plan["summary_text"] == "Proposed 1 intent"
+
+    _seed_reason_round(
+        client, project_id, "run-r2", '{"accepted": true, "data": {"complete": "goal met"}}'
+    )
+    plan = client.get(f"/projects/{project_id}/sessions").json()["sessions"][1]
+    assert plan["round"] == 2
+    assert plan["summary"] == {"kind": "complete", "description": "goal met"}
+    assert plan["summary_text"] == "Goal satisfied"
+
+    _seed_reason_round(client, project_id, "run-r3", '{"accepted": true, "data": {}}')
+    plan = client.get(f"/projects/{project_id}/sessions").json()["sessions"][1]
+    assert plan["round"] == 3
+    assert plan["summary"] == {"kind": "none"}
+    assert plan["summary_text"] == "No new intents this round"
+
+    # A cancelled round without a parseable message becomes an interruption report.
+    _seed_reason_round(
+        client, project_id, "run-r4", "I'll start by reading the graph snapshot.",
+        status="cancelled",
+    )
+    plan = client.get(f"/projects/{project_id}/sessions").json()["sessions"][1]
+    assert plan["round"] == 4
+    assert plan["summary"]["kind"] == "interrupted"
+    interruption = plan["summary"]["interruption"]
+    assert interruption["terminal_state"] == "cancelled"
+    assert interruption["reason"] == "cancelled"
+    assert interruption["turns"] == 1
+    assert "The run was interrupted" in interruption["text"]
+
+
+def test_report_endpoint_renders_deterministic_sections(client: TestClient) -> None:
+    project_id = _project(client)
+    execute, _conclude = _seed_pair(client, project_id)
+    with db.get_conn() as conn:
+        conn.execute(
+            "INSERT INTO facts (id, project_id, description) VALUES ('f001', ?, ?)",
+            (project_id, "The endpoint leaks a stack trace."),
+        )
+        conn.execute(
+            "INSERT INTO intents (id, project_id, to_fact_id, description, creator, worker, "
+            "created_at, concluded_at) VALUES ('i001', ?, 'f001', 'probe it', 'copilot', 'pi-1', ?, ?)",
+            (project_id, _now(-700), _now(-280)),
+        )
+        conn.execute(
+            "INSERT INTO hints (id, project_id, content, creator, created_at) "
+            "VALUES ('h001', ?, 'do not modify the target', 'human', ?)",
+            (project_id, _now(-800)),
+        )
+        conn.execute(
+            "INSERT INTO intents (id, project_id, description, creator, worker, created_at) "
+            "VALUES ('i002', ?, 'still waiting', 'copilot', NULL, ?)",
+            (project_id, _now(-5)),
+        )
+
+    response = client.get(f"/projects/{project_id}/report")
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["project_id"] == project_id
+    assert payload["counts"]["findings"] == 1
+    assert payload["counts"]["tool_calls"] == 1
+    markdown = payload["markdown"]
+    for heading in (
+        "# runtime-v4",
+        "## Engagement summary",
+        "## Goal",
+        "## Operator constraints",
+        "## Results at a glance",
+        "## Confirmed findings",
+        "## Intent ledger",
+        "## Verification & reproducibility",
+        "## Retest plan",
+        "## Appendix: all facts",
+    ):
+        assert heading in markdown, heading
+    assert "- do not modify the target (human)" in markdown
+    assert f"run {execute[:8]}" in markdown
+    assert f"`GET /projects/{project_id}/sessions/worker:{execute[:8]}/activities`" in markdown
+    assert "| i001 | concluded | - | f001 |" in markdown
+    assert "| i002 | open | - | - |" in markdown
+    assert "- [ ] Re-run intent i001 (probe it) and compare outcome fact f001" in markdown
+    assert "### origin" in markdown and "### goal" in markdown
+
+    # Deterministic apart from the generated-at stamp.
+    again = client.get(f"/projects/{project_id}/report").json()
+    assert again["markdown"].split("\n", 2)[2] == markdown.split("\n", 2)[2]

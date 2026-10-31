@@ -109,6 +109,57 @@ def worker_run_status(result: ProcessResult | None, error: str | None = None) ->
     return "failed"
 
 
+def format_duration(duration_ms: int | None) -> str:
+    """Human duration for the interruption card (``3m50s``, ``42s``, ``1h02m``)."""
+    if duration_ms is None:
+        return "unknown"
+    seconds = max(0, int(duration_ms) // 1000)
+    hours, remainder = divmod(seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+    if hours:
+        return f"{hours}h{minutes:02d}m"
+    if minutes:
+        return f"{minutes}m{secs:02d}s"
+    return f"{secs}s"
+
+
+def interruption_reason(status: str, result: ProcessResult | None = None) -> str:
+    """Artex-style interruption reason derived from the terminal status."""
+    if result is not None and result.cancel_reason == "stopped":
+        return "paused_by_user"
+    if status == "timeout" or (result is not None and result.timed_out):
+        return "timeout"
+    return "cancelled"
+
+
+def interruption_description(
+    *,
+    reason: str,
+    status: str,
+    turns: int,
+    duration_ms: int | None,
+    usage: dict[str, Any],
+    tool: dict[str, Any] | None,
+) -> str:
+    """Plain-text (markdown-ish) interruption report body — the row's description."""
+    lines = [
+        f"The run was interrupted: {reason}. Terminal state: {status}.",
+        f"Executed: {turns} model turns. This run took: {format_duration(duration_ms)}.",
+        "Cumulative tokens: "
+        f"input {int(usage.get('input', 0))} / output {int(usage.get('output', 0))} "
+        f"/ cache read {int(usage.get('cache_read', 0))}.",
+    ]
+    if tool is None:
+        lines.append("Tool running at interruption: none (no tool call was in flight).")
+    else:
+        name = tool.get("name") or "unknown"
+        tool_input = tool.get("input") or ""
+        lines.append(
+            f"Tool running at interruption: {name} {tool_input} (returned no result)."
+        )
+    return "\n".join(lines)
+
+
 def worker_run_error(result: ProcessResult | None, error: str | None = None) -> str | None:
     if error:
         return _clip(error, MAX_ERROR)
@@ -242,6 +293,15 @@ class WorkerActivityRecorder:
             with self._usage_lock:
                 usage = dict(self._usage)
                 model = self._model
+            if terminal in ("cancelled", "timeout"):
+                # One extra row *before* the terminal worker_run row so the transcript
+                # explains why the run stopped (Artex interruption card).
+                self._enqueue_interruption(
+                    terminal,
+                    result=result,
+                    duration_ms=duration_ms,
+                    usage=usage,
+                )
             metadata: dict[str, Any] = {
                 "run_id": self.run_id,
                 "worker": self.worker,
@@ -382,6 +442,58 @@ class WorkerActivityRecorder:
                     close()
                 except Exception:  # pragma: no cover
                     LOG.debug("closing worker activity HTTP session failed", exc_info=True)
+
+    def _enqueue_interruption(
+        self,
+        terminal: str,
+        *,
+        result: ProcessResult | None,
+        duration_ms: int | None,
+        usage: dict[str, Any],
+    ) -> None:
+        """Queue the structured interruption row for a cancelled/timed-out run."""
+        try:
+            snapshot = self.parser.interruption_snapshot()
+        except Exception:  # pragma: no cover - observability must never break finish
+            LOG.debug("interruption snapshot failed project=%s run=%s",
+                      self.project_id, self.run_id, exc_info=True)
+            snapshot = {"turns": 0, "tool": None, "thinking": ""}
+        reason = interruption_reason(terminal, result)
+        turns = int(snapshot.get("turns") or 0)
+        tool = snapshot.get("tool")
+        description = interruption_description(
+            reason=reason,
+            status=terminal,
+            turns=turns,
+            duration_ms=duration_ms,
+            usage=usage,
+            tool=tool,
+        )
+        emission = WorkerEmission(
+            slot="interruption",
+            kind="worker_interruption",
+            status="done",
+            title="Worker run interrupted",
+            description=description,
+            metadata={
+                "reason": reason,
+                "terminal_state": terminal,
+                "turns": turns,
+                "duration_ms": duration_ms,
+                "usage": {
+                    "input": int(usage.get("input", 0)),
+                    "output": int(usage.get("output", 0)),
+                    "cache_read": int(usage.get("cache_read", 0)),
+                },
+                "tool": tool,
+                "thinking": snapshot.get("thinking") or None,
+            },
+            update=False,
+        )
+        # The normal queue is correct here: it is one row and it must stay ordered
+        # before the finish row. If the queue is full the row is counted as dropped
+        # rather than silently reordering the transcript.
+        self._enqueue_emission(emission)
 
     # -- HTTP writes ------------------------------------------------------
     def _base_metadata(self, extra: dict[str, Any] | None = None) -> dict[str, Any]:

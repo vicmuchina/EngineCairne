@@ -120,4 +120,11 @@ class HeartbeatLease:
         with self._lock:
             process = self._process
         if process is not None:
-            process.kill()
+            if status_code == 403:
+                # The project is no longer active (paused/stopped). Mark the process as
+                # cancelled so the recorder renders the interruption card with
+                # "paused_by_user" instead of an anonymous exit code 143.
+                process.cancel("stopped")
+            else:
+                # Claim conflict / lost lease: no reason to keep the worker alive.
+                process.kill()
