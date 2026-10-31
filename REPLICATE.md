@@ -73,7 +73,7 @@ mkdir -p ../data
 
 ```bash
 curl -s http://127.0.0.1:8000/projects | head -c 200
-# {"items":[],"generated_at":"..."}
+# []
 sqlite3 ../data/cairn.db ".tables"
 # approvals chat_activities chat_conversations chat_messages chat_runs counters
 # facts hints intent_sources intents project_activity projects scoped_counters settings
@@ -228,19 +228,21 @@ If you see `bare pi` behaviour, read §7 before continuing.
 
 ## 5. End-to-end proof
 
-Create a project with one intent, then watch it run:
+Create a project with one intent, then watch it run. `bootstrap_enabled: false`
+skips the bootstrap task so the explore intent is immediately claimable:
 
 ```bash
 curl -s -X POST http://127.0.0.1:8000/projects -H 'content-type: application/json' -d '{
   "title": "smoke",
   "origin": "A scratch project. Goal: prove the dispatcher runs a worker.",
-  "goal": "A fact named `probe` exists in this project."
+  "goal": "A fact named `probe` exists in this project.",
+  "bootstrap_enabled": false
 }'
-# note the id, e.g. proj_001
+# {"project":{"id":"proj_001",...},"facts":[{"id":"origin",...},{"id":"goal",...}],...}
 
 curl -s -X POST http://127.0.0.1:8000/projects/proj_001/intents \
   -H 'content-type: application/json' \
-  -d '{"description":"Run `echo probe` with bash, then write fact `probe`.","creator":"human"}'
+  -d '{"from":["origin"],"description":"Run `echo probe` with bash, then write fact `probe`.","creator":"human","priority":10}'
 ```
 
 Then poll:
