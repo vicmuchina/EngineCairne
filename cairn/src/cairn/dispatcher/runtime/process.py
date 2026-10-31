@@ -64,6 +64,7 @@ class ManagedProcess:
         self._cancel_reason: str | None = None
         self._read_error: str | None = None
         self._done = threading.Event()
+        self._timeout_lock = threading.Lock()
         self._on_stdout_line = on_stdout_line
         self._stdout_decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
         self._stderr_decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
@@ -105,6 +106,10 @@ class ManagedProcess:
             cancelled=self._cancel_reason is not None,
             cancel_reason=self._cancel_reason,
         )
+
+    def mark_timed_out(self) -> None:
+        with self._timeout_lock:
+            self._timed_out = True
 
     def kill(self) -> None:
         if self._exec_id is None:
@@ -226,9 +231,12 @@ class ManagedProcess:
     def _kill_pid(self, pid: int) -> None:
         last_error: str | None = None
         for command in (
+            # Kill the process group first (docker exec starts the command as a group
+            # leader), then the pid as a fallback for older shells.
+            ["kill", "-KILL", f"-{pid}"],
             ["kill", "-KILL", str(pid)],
-            ["/bin/sh", "-lc", f"kill -KILL {pid}"],
-            ["sh", "-lc", f"kill -KILL {pid}"],
+            ["/bin/sh", "-lc", f"kill -KILL -- -{pid} 2>/dev/null || kill -KILL {pid}"],
+            ["sh", "-lc", f"kill -KILL -- -{pid} 2>/dev/null || kill -KILL {pid}"],
         ):
             try:
                 result = self._container.exec_run(command, stdout=False, stderr=False)

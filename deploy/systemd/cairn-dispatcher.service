@@ -1,0 +1,29 @@
+[Unit]
+Description=Cairn dispatcher (runs pi workers as host processes)
+After=cairn-server.service
+Wants=cairn-server.service
+
+[Service]
+Type=simple
+User=cairn
+Group=cairn
+WorkingDirectory=/opt/cairn
+ExecStart=/opt/cairn/app/cairn/.venv/bin/cairn dispatch --config /opt/cairn/dispatch.yaml
+# Restart=always is required: the scheduler watchdog exits(75) to self-heal a wedge.
+Restart=always
+RestartSec=10
+# Keep a runaway worker inside a cgroup instead of the host.
+MemoryAccounting=yes
+MemoryHigh=2G
+MemoryMax=3G
+MemorySwapMax=1G
+TasksMax=256
+# Clean environment: never inherit a parent agent's PI_SESSION_*/PI_* variables.
+# A child pi that inherits a live session id waits on stdin instead of running.
+Environment=HOME=/home/cairn
+Environment=PATH=/opt/cairn/app/cairn/.venv/bin:/home/cairn/.local/bin:/usr/local/bin:/usr/bin:/bin
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -6,6 +6,7 @@ import os
 import signal
 import subprocess
 import threading
+import time
 from collections.abc import Callable
 from contextlib import suppress
 
@@ -58,6 +59,7 @@ class LocalProcess:
         self._timed_out = False
         self._cancel_reason: str | None = None
         self._kill_lock = threading.Lock()
+        self._timeout_lock = threading.Lock()
 
     def start(self) -> None:
         # Binary pipes + one incremental decoder per stream: the decoder is what makes a
@@ -97,11 +99,25 @@ class LocalProcess:
     def communicate(self, timeout: float | None) -> ProcessResult:
         assert self._process is not None
         wait_for = float(self._timeout_seconds) if self._timeout_seconds is not None else timeout
-        try:
-            self._process.wait(timeout=wait_for)
-        except subprocess.TimeoutExpired:
-            self._timed_out = True
-            self._terminate()
+        deadline = time.monotonic() + wait_for if wait_for is not None else None
+        # Poll instead of one long wait: a supervisor thread may mark this process timed
+        # out and kill the group at timeout+grace; this loop must also be immune to a
+        # process.wait() that never returns on some platform edge case.
+        while True:
+            if self._timed_out:
+                self._terminate()
+                break
+            remaining = None if deadline is None else deadline - time.monotonic()
+            if remaining is not None and remaining <= 0:
+                self.mark_timed_out()
+                self._terminate()
+                break
+            poll = 0.2 if remaining is None else min(0.2, max(0.0, remaining))
+            try:
+                self._process.wait(timeout=poll)
+                break
+            except subprocess.TimeoutExpired:
+                continue
         with suppress(subprocess.TimeoutExpired):
             self._process.wait(timeout=FORCE_KILL_REAP_TIMEOUT_SECONDS)
         if self._stdout_thread is not None:
@@ -119,6 +135,10 @@ class LocalProcess:
             cancelled=self._cancel_reason is not None,
             cancel_reason=self._cancel_reason,
         )
+
+    def mark_timed_out(self) -> None:
+        with self._timeout_lock:
+            self._timed_out = True
 
     def kill(self) -> None:
         self._terminate()

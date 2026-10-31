@@ -292,6 +292,23 @@ class WorkerRunCounts(BaseModel):
     errors: int = 0
 
 
+class TokenUsage(BaseModel):
+    input: int = 0
+    output: int = 0
+    cache_read: int = 0
+    cache_write: int = 0
+    reasoning: int = 0
+    total_tokens: int = 0
+    cost: float = 0.0
+
+
+class SessionTokens(BaseModel):
+    input: int = 0
+    cache_read: int = 0
+    output: int = 0
+    cost: float = 0.0
+
+
 class WorkerRunItem(BaseModel):
     run_id: str
     project_id: str
@@ -308,6 +325,8 @@ class WorkerRunItem(BaseModel):
     duration_ms: int | None = None
     error: str | None = None
     session: str | None = None
+    model: str | None = None
+    usage: TokenUsage = Field(default_factory=TokenUsage)
     transcript_truncated: bool = False
     counts: WorkerRunCounts = Field(default_factory=WorkerRunCounts)
     transcript: list[ProjectActivityItem] = Field(default_factory=list)
@@ -318,6 +337,85 @@ class WorkerRunList(BaseModel):
     project_id: str
     generated_at: str
     active_count: int = 0
+
+
+class SessionItem(BaseModel):
+    key: str
+    role: str
+    title: str
+    status: str
+    live: bool = False
+    last_activity_at: str | None = None
+    tokens: SessionTokens = Field(default_factory=SessionTokens)
+    unread: int = 0
+    run_id: str | None = None
+    worker: str | None = None
+    task: str | None = None
+    intent_id: str | None = None
+    stale: bool = False
+    started_at: str | None = None
+    finished_at: str | None = None
+    duration_ms: int | None = None
+    model: str | None = None
+    counts: WorkerRunCounts | None = None
+
+
+class SessionList(BaseModel):
+    project_id: str
+    generated_at: str
+    project_status: str
+    task_total: SessionTokens = Field(default_factory=SessionTokens)
+    sessions: list[SessionItem] = Field(default_factory=list)
+
+
+class SessionTool(BaseModel):
+    name: str | None = None
+    call_id: str | None = None
+    input: str | None = None
+    output: str | None = None
+    duration_ms: int | None = None
+    is_error: bool = False
+
+
+class SessionActivityTokens(BaseModel):
+    input: int = 0
+    output: int = 0
+    cache_read: int = 0
+
+
+class SessionActivityItem(BaseModel):
+    seq: int
+    id: int
+    kind: str
+    role: str | None = None
+    status: str = "done"
+    content: str | None = None
+    tool: SessionTool | None = None
+    tokens: SessionActivityTokens = Field(default_factory=SessionActivityTokens)
+    metadata: dict = Field(default_factory=dict)
+    created_at: str
+
+
+class SessionActivityPage(BaseModel):
+    key: str
+    items: list[SessionActivityItem] = Field(default_factory=list)
+    has_more: bool = False
+    earliest_seq: int | None = None
+
+
+class ClaimReconcileRequest(BaseModel):
+    claim_stale_seconds: int = Field(default=1800, ge=1)
+    dry_run: bool = False
+
+
+class ClaimReconcileResponse(BaseModel):
+    project_id: str
+    generated_at: str
+    checked: int
+    released: int
+    protected: int
+    skipped_fresh: int
+    released_intents: list[dict] = Field(default_factory=list)
 
 
 class WorkerRunCloseRequest(BaseModel):

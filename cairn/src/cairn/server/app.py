@@ -16,6 +16,7 @@ from cairn.server.routers import (
     hints,
     intents,
     projects,
+    sessions,
     settings,
     steering,
     workers,
@@ -79,6 +80,7 @@ app.include_router(approvals.router)
 app.include_router(export.router)
 app.include_router(chat.router)
 app.include_router(workers.router)
+app.include_router(sessions.router)
 
 
 @app.get("/", include_in_schema=False)

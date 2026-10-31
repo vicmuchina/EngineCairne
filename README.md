@@ -130,6 +130,13 @@ Supported worker backends: **Claude Code**, **Codex**, and **Pi**.
 
 ## Getting Started
 
+> **Want a local, no-Docker install, a systemd deployment, and an agent-executable
+> checklist?** → **[REPLICATE.md](REPLICATE.md)**. It covers the exact local-worker
+> configuration used in production (pi 1.4.0, 3 concurrent workers), the API surface,
+> the sessions endpoint, and the failure modes we hit while operating it.
+>
+> The section below is the upstream container-based path; both are supported.
+
 **Prerequisites**
  
 - macOS or Linux

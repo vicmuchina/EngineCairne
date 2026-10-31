@@ -15,6 +15,9 @@ from cairn.dispatcher.config import ContainerConfig
 from cairn.dispatcher.runtime.process import ManagedProcess
 
 LOG = logging.getLogger(__name__)
+# Docker SDK requests are blocking and have no default deadline. A wedged daemon must fail
+# the task (and let the process supervisor take over) instead of freezing a task thread.
+DOCKER_API_TIMEOUT_SECONDS = 15
 
 
 class ContainerManager:
@@ -22,7 +25,7 @@ class ContainerManager:
 
     def __init__(self, config: ContainerConfig):
         self._config = config
-        self._client = docker.from_env()
+        self._client = docker.from_env(timeout=DOCKER_API_TIMEOUT_SECONDS)
         self._ensure_running_locks: dict[str, threading.Lock] = {}
         self._ensure_running_locks_guard = threading.Lock()
 

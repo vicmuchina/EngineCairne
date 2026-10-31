@@ -1,0 +1,31 @@
+{
+  "_comment": "Example pi provider that streams JSONL events Cairn can parse. Copy into ~/.pi/agent/models.json and adjust. Never commit a real key: use the !command form so the key is fetched at runtime.",
+  "providers": {
+    "opencode-go": {
+      "name": "OpenCode Go",
+      "type": "openai-completions",
+      "api": "openai-completions",
+      "baseUrl": "https://opencode.ai/zen/go/v1",
+      "apiKey": "!python3 ~/.zcode/cli/get-opencode-key.py opencode-go",
+      "models": [
+        {
+          "id": "deepseek-v4.1-flash",
+          "name": "DeepSeek V4.1 Flash",
+          "reasoning": true,
+          "input": ["text", "image"],
+          "contextWindow": 1000000,
+          "maxTokens": 131072,
+          "thinkingLevelMap": {
+            "off": "off",
+            "minimal": null,
+            "low": null,
+            "medium": null,
+            "high": "high",
+            "xhigh": null,
+            "max": "max"
+          }
+        }
+      ]
+    }
+  }
+}

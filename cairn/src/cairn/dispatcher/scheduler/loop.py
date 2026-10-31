@@ -17,6 +17,7 @@ from cairn.dispatcher.runtime.cancellation import TaskCancellation
 from cairn.dispatcher.runtime.containers import ContainerManager
 from cairn.dispatcher.runtime.local_backend import LocalBackend
 from cairn.dispatcher.runtime.startup_healthcheck import format_failure_summary, run_startup_healthchecks
+from cairn.dispatcher.scheduler.watchdog import LoopWatchdog
 from cairn.dispatcher.scheduler.worker_select import choose_worker, select_unclaimed_intent
 from cairn.dispatcher.workers.registry import get_driver
 from cairn.dispatcher.tasks.bootstrap import run_bootstrap_task
@@ -64,8 +65,14 @@ class DispatcherLoop:
         self.project_cursor = 0
         self._settings_checked = False
         self._startup_healthchecks_checked = False
+        self._last_claim_reconcile = 0.0
+        self._claim_reconcile_done = False
+        self.watchdog = LoopWatchdog(self.config.runtime.watchdog_seconds)
 
     def close(self) -> None:
+        watchdog = getattr(self, "watchdog", None)
+        if watchdog is not None:
+            watchdog.stop()
         if self.futures:
             LOG.info(
                 "dispatcher shutting down waiting_for_tasks=%s running_projects=%s",
@@ -78,20 +85,25 @@ class DispatcherLoop:
         self.client.close()
 
     def run(self, once: bool = False) -> None:
+        self.watchdog.start()
         try:
             self.run_startup_healthchecks()
             while True:
                 try:
+                    self.watchdog.touch()
                     if not self._settings_checked:
                         self._validate_server_settings()
                         self._settings_checked = True
                     self._reap_futures()
                     self._reap_cleanup_futures()
+                    self.watchdog.touch()
                     summaries = self.client.list_projects()
                     self._initialize_reason_checkpoints(summaries)
                     self._refresh_runtime_projects(summaries)
                     self._cancel_inactive_tasks(summaries)
                     self._queue_container_cleanups(summaries)
+                    self._maybe_reconcile_claims(summaries)
+                    self.watchdog.touch()
                     self._dispatch_available(summaries)
                 except requests.RequestException as exc:
                     if once:
@@ -101,11 +113,11 @@ class DispatcherLoop:
                         exc,
                         self.config.runtime.interval,
                     )
-                    time.sleep(self.config.runtime.interval)
+                    self.watchdog.sleep(self.config.runtime.interval)
                     continue
                 if once:
                     break
-                time.sleep(self.config.runtime.interval)
+                self.watchdog.sleep(self.config.runtime.interval)
         finally:
             self.close()
 
@@ -252,6 +264,9 @@ class DispatcherLoop:
         return [by_id[project_id] for project_id in ordered_ids]
 
     def _try_dispatch_project(self, summary: ProjectSummary) -> bool:
+        watchdog = getattr(self, "watchdog", None)
+        if watchdog is not None:
+            watchdog.touch()
         skip_scope = f"project:{summary.id}:skip"
         container_name = self.container_manager.container_name(summary.id)
         if container_name in self._cleanup_pending:
@@ -564,6 +579,61 @@ class DispatcherLoop:
         )
         LOG.info("dispatched explore project=%s intent=%s worker=%s", project.project.id, intent.id, worker.name)
         return True
+
+    def _maybe_reconcile_claims(self, summaries: list[ProjectSummary]) -> None:
+        """Release stale claims without ever resuming a stopped project.
+
+        Reclaimable = open intent (``concluded_at IS NULL``), worker set, heartbeat older
+        than ``claim_stale_seconds``, and no active worker_run for that intent. Only the
+        intent's ``worker`` column is changed; facts, status and concluded intents are
+        untouched. Runs at startup and every ``claim_reconcile_interval`` seconds.
+        """
+        reconcile = getattr(self.client, "reconcile_claims", None)
+        if reconcile is None:
+            return
+        now = time.monotonic()
+        interval = self.config.runtime.claim_reconcile_interval
+        if self._claim_reconcile_done:
+            if interval <= 0 or now - self._last_claim_reconcile < interval:
+                return
+        self._last_claim_reconcile = now
+        startup = not self._claim_reconcile_done
+        self._claim_reconcile_done = True
+        released_total = 0
+        projects = 0
+        for summary in summaries:
+            try:
+                result = reconcile(
+                    summary.id,
+                    stale_seconds=self.config.runtime.claim_stale_seconds,
+                )
+            except Exception as exc:  # never wedge the loop on reconciliation
+                LOG.warning("claim reconciliation failed project=%s error=%s", summary.id, exc)
+                continue
+            if not getattr(result, "ok", False):
+                LOG.warning(
+                    "claim reconciliation failed project=%s status=%s",
+                    summary.id,
+                    getattr(result, "status_code", None),
+                )
+                continue
+            projects += 1
+            data = getattr(result, "data", None)
+            if isinstance(data, dict):
+                try:
+                    released = int(data.get("released") or 0)
+                except (TypeError, ValueError):
+                    released = 0
+                released_total += released
+        LOG.info(
+            "claim reconciliation completed startup=%s projects=%s released=%s "
+            "stale_after=%ss interval=%ss",
+            startup,
+            projects,
+            released_total,
+            self.config.runtime.claim_stale_seconds,
+            interval,
+        )
 
     def _select_worker(self, project_id: str, task_type: str) -> WorkerSelection:
         now = time.time()

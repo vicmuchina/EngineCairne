@@ -1,0 +1,28 @@
+[Unit]
+Description=Cairn API server (fact-graph exploration engine)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cairn
+Group=cairn
+WorkingDirectory=/opt/cairn/app/cairn
+ExecStart=/opt/cairn/app/cairn/.venv/bin/cairn serve \
+    --host 127.0.0.1 \
+    --port 8000 \
+    --db-path /opt/cairn/data/cairn.db \
+    --no-access-log
+Restart=always
+RestartSec=5
+Environment=HOME=/home/cairn
+Environment=PATH=/opt/cairn/app/cairn/.venv/bin:/usr/local/bin:/usr/bin:/bin
+# The server keeps in-process RPC sessions; never run it with multiple workers.
+Environment=CAIRN_SERVER_WORKERS=1
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/opt/cairn/data /opt/cairn/runs
+
+[Install]
+WantedBy=multi-user.target

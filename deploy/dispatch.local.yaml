@@ -1,0 +1,43 @@
+# Production-shaped local dispatcher config.
+#
+# Copy next to the server (`/opt/cairn/dispatch.yaml`) and edit the absolute paths.
+# `runtime.execution: local` runs workers as host processes with the service user's
+# own CLI configuration — Cairn injects no API keys.
+#
+# Verified with: cairn 0.2.1, pi 1.4.0, 3 concurrent workers.
+
+server: "http://127.0.0.1:8000"
+
+runtime:
+  execution: local
+  worker_healthcheck: disabled      # no base_url to probe; startup checks the CLI is on PATH
+  max_workers: 3                    # total concurrent workers across all projects
+  max_running_projects: 2           # how many projects may run at once
+  max_project_workers: 3            # per-project cap
+  interval: 3
+  healthcheck_timeout: 15
+  prompt_group: "default"
+  # watchdog_seconds: 120           # no scheduler progress for this long -> exit(75)
+  # claim_stale_seconds: 1800       # reclaim intent claims with no active run
+
+tasks:
+  bootstrap:
+    timeout: 1200                   # research needs real thinking time
+    conclude_timeout: 120
+  reason:
+    timeout: 600
+    max_intents: 2
+  explore:
+    timeout: 1200
+    conclude_timeout: 180
+
+local:
+  workspace_root: "/opt/cairn/runs"
+  completed_action: keep            # keep run directories for evidence
+
+workers:
+  - name: "local-pi"
+    type: "pi"
+    task_types: [bootstrap, reason, explore]
+    max_running: 3
+    priority: 0

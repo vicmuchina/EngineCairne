@@ -42,6 +42,52 @@ def _utcnow() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _usage_int(value: Any) -> int:
+    if isinstance(value, bool):
+        return 0
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _usage_cost(value: Any) -> float:
+    if isinstance(value, dict):
+        value = value.get("total") or value.get("cost") or 0
+    if isinstance(value, bool):
+        return 0.0
+    try:
+        return float(value or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def empty_usage() -> dict[str, Any]:
+    return {
+        "input": 0,
+        "output": 0,
+        "cache_read": 0,
+        "cache_write": 0,
+        "reasoning": 0,
+        "total_tokens": 0,
+        "cost": 0.0,
+    }
+
+
+def add_usage(total: dict[str, Any], usage: Any) -> None:
+    if not isinstance(usage, dict):
+        return
+    total["input"] = int(total.get("input", 0)) + _usage_int(usage.get("input"))
+    total["output"] = int(total.get("output", 0)) + _usage_int(usage.get("output"))
+    total["cache_read"] = int(total.get("cache_read", 0)) + _usage_int(usage.get("cacheRead"))
+    total["cache_write"] = int(total.get("cache_write", 0)) + _usage_int(usage.get("cacheWrite"))
+    total["reasoning"] = int(total.get("reasoning", 0)) + _usage_int(usage.get("reasoning"))
+    total["total_tokens"] = int(total.get("total_tokens", 0)) + _usage_int(
+        usage.get("totalTokens")
+    )
+    total["cost"] = float(total.get("cost", 0.0)) + _usage_cost(usage.get("cost"))
+
+
 def _clip(value: str | None, limit: int) -> str | None:
     if value is None:
         return None
@@ -122,6 +168,9 @@ class WorkerActivityRecorder:
         self._finish_posted = False
         self._dropped = 0
         self._logged_post_failure = False
+        self._usage = empty_usage()
+        self._model: str | None = None
+        self._usage_lock = threading.Lock()
 
     # -- lifecycle --------------------------------------------------------
     def start(self) -> None:
@@ -142,6 +191,7 @@ class WorkerActivityRecorder:
         with self._lock:
             emissions = self.parser.feed_line(line)
         for emission in emissions:
+            self._track_usage(emission)
             self._enqueue_emission(emission)
 
     def feed_event(self, event: dict[str, Any]) -> None:
@@ -150,6 +200,7 @@ class WorkerActivityRecorder:
         with self._lock:
             emissions = self.parser.feed_event(event)
         for emission in emissions:
+            self._track_usage(emission)
             self._enqueue_emission(emission)
 
     def finish(
@@ -182,11 +233,15 @@ class WorkerActivityRecorder:
             with self._lock:
                 emissions = self.parser.flush()
             for emission in emissions:
+                self._track_usage(emission)
                 self._enqueue_emission(emission)
             terminal = status or worker_run_status(result, error)
             ended_at = _utcnow()
             if duration_ms is None:
                 duration_ms = max(0, int((time.monotonic() - self._started_monotonic) * 1000))
+            with self._usage_lock:
+                usage = dict(self._usage)
+                model = self._model
             metadata: dict[str, Any] = {
                 "run_id": self.run_id,
                 "worker": self.worker,
@@ -199,7 +254,10 @@ class WorkerActivityRecorder:
                 "session": session or self.parser.session,
                 "dropped_events": self._dropped,
                 "source": "dispatcher",
+                "usage": usage,
             }
+            if model:
+                metadata["model"] = model
             if result is not None:
                 metadata.update(
                     {
@@ -240,8 +298,40 @@ class WorkerActivityRecorder:
                 # The writer died before it could persist the terminal row.
                 self._post_finish(finish)
 
+    # -- usage ------------------------------------------------------------
+    def _track_usage(self, emission: WorkerEmission) -> None:
+        """Fold pi usage into the run total (writer-thread safe).
+
+        ``worker_message`` carries usage for turns that produced prose; ``worker_usage``
+        covers tool-call-only turns that emit no message row, so the run total is not
+        limited to the one message that happened to contain text.
+        """
+        if emission.kind not in ("worker_message", "worker_usage"):
+            return
+        metadata = emission.metadata or {}
+        model = metadata.get("model")
+        usage = metadata.get("usage")
+        with self._usage_lock:
+            if isinstance(model, str) and model:
+                self._model = model
+            if isinstance(usage, dict):
+                add_usage(self._usage, usage)
+
+    @property
+    def usage(self) -> dict[str, Any]:
+        with self._usage_lock:
+            return dict(self._usage)
+
+    @property
+    def model(self) -> str | None:
+        with self._usage_lock:
+            return self._model
+
     # -- queue ------------------------------------------------------------
     def _enqueue_emission(self, emission: WorkerEmission) -> None:
+        # Usage-only emissions are accounting signals, not transcript rows.
+        if emission.kind == "worker_usage":
+            return
         try:
             self._queue.put_nowait(("emission", emission))
         except queue.Full:

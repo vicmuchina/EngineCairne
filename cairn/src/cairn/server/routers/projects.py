@@ -1,8 +1,11 @@
 from fastapi import APIRouter, HTTPException, Query
 
 from cairn.server import activity as activity_store
+from cairn.server.claims import reconcile_claims
 from cairn.server.db import get_conn
 from cairn.server.models import (
+    ClaimReconcileRequest,
+    ClaimReconcileResponse,
     CompleteRequest,
     CreateProjectRequest,
     Fact,
@@ -195,6 +198,24 @@ def project_overview(project_id: str):
             recent_activity=payload["recent_activity"],
             recent_activity_order=payload.get("recent_activity_order", "newest_first"),
         )
+
+
+@router.post(
+    "/projects/{project_id}/claims/reconcile",
+    response_model=ClaimReconcileResponse,
+)
+def reconcile_project_claims(project_id: str, body: ClaimReconcileRequest | None = None):
+    """Release abandoned worker claims; never touch facts, concluded intents or status."""
+    body = body or ClaimReconcileRequest()
+    with get_conn() as conn:
+        get_project_or_404(conn, project_id)
+        payload = reconcile_claims(
+            conn,
+            project_id,
+            claim_stale_seconds=body.claim_stale_seconds,
+            dry_run=body.dry_run,
+        )
+        return ClaimReconcileResponse(**payload)
 
 
 @router.post("/projects/{project_id}/activity", response_model=ProjectActivityItem, status_code=201)

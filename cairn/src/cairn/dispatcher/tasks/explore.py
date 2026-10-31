@@ -133,6 +133,7 @@ def run_explore_task(
                 on_stdout_line=activity.feed_line
                 if activity is not None and driver_streams_json_events(driver)
                 else None,
+                activity=activity,
             )
         except BaseException as exc:
             finish_worker_activity(activity, None, error=f"{type(exc).__name__}: {exc}")
@@ -360,6 +361,7 @@ def _try_conclude_fallback(
             on_stdout_line=activity.feed_line
             if activity is not None and driver_streams_json_events(driver)
             else None,
+            activity=activity,
         )
     except BaseException as exc:
         finish_worker_activity(activity, None, error=f"{type(exc).__name__}: {exc}")
@@ -445,6 +447,7 @@ def _run_process(
     lease: HeartbeatLease,
     cancellation: TaskCancellation,
     on_stdout_line=None,
+    activity=None,
 ):
     return run_worker_process(
         container_manager,
@@ -456,4 +459,5 @@ def _run_process(
         lease=lease,
         cancellation=cancellation,
         on_stdout_line=on_stdout_line,
+        activity=activity,
     )

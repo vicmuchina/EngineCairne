@@ -13,6 +13,7 @@ from cairn.dispatcher.runtime.cancellation import TaskCancellation
 from cairn.dispatcher.runtime.containers import ContainerManager
 from cairn.dispatcher.runtime.heartbeat import HeartbeatLease
 from cairn.dispatcher.runtime.process import ProcessResult
+from cairn.dispatcher.runtime.supervisor import ProcessSupervisor
 from cairn.dispatcher.workers.activity import WorkerActivityRecorder
 
 PROCESS_COMMUNICATE_GRACE_SECONDS = 15
@@ -169,6 +170,23 @@ def write_graph_snapshot_reference(
     )
 
 
+def _supervisor_timeout(activity: object | None, phase: str) -> None:
+    """Mark the worker run timeout from the independent supervisor thread.
+
+    The task thread may still be stuck in ``communicate()``; the recorder must not wait for
+    it to expose the run as finished with ``timeout``. ``finish()`` is idempotent.
+    """
+    if activity is None:
+        return
+    finish = getattr(activity, "finish", None)
+    if not callable(finish):
+        return
+    try:
+        finish("timeout", error=f"worker process exceeded hard deadline during {phase}")
+    except Exception:  # pragma: no cover - observability must never break the supervisor
+        LOG.warning("failed to close timed-out worker activity phase=%s", phase, exc_info=True)
+
+
 def run_worker_process(
     container_manager: ContainerManager,
     container_name: str,
@@ -180,6 +198,7 @@ def run_worker_process(
     lease: HeartbeatLease | None = None,
     cancellation: TaskCancellation | None = None,
     on_stdout_line: Callable[[str], None] | None = None,
+    activity: object | None = None,
 ) -> ProcessResult:
     LOG.info(
         "starting container exec container=%s worker=%s phase=%s timeout=%ss",
@@ -201,9 +220,18 @@ def run_worker_process(
         lease.attach_process(process)
     if cancellation is not None:
         cancellation.attach_process(process)
+    supervisor = ProcessSupervisor(
+        process,
+        timeout_seconds,
+        grace_seconds=PROCESS_COMMUNICATE_GRACE_SECONDS,
+        label=f"{worker.name}:{phase}",
+        on_timeout=lambda: _supervisor_timeout(activity, phase),
+    )
+    supervisor.start()
     try:
         return process.communicate(timeout=communicate_timeout(timeout_seconds))
     finally:
+        supervisor.stop()
         if lease is not None:
             lease.attach_process(None)
         if cancellation is not None:

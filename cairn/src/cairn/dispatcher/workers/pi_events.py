@@ -402,6 +402,21 @@ class PiWorkerEventParser:
                     ),
                 )
             )
+        # Usage is reported on every assistant message, including tool-call-only turns
+        # that produce no text row. Track those turns explicitly so the run total is not
+        # silently limited to the single message that happened to contain prose.
+        if not (text or self._message_open):
+            usage = _usage(message)
+            if usage is not None:
+                out.append(
+                    WorkerEmission(
+                        slot="usage",
+                        kind="worker_usage",
+                        status="done",
+                        title=f"worker {self.worker} usage",
+                        metadata={"usage": usage, "model": message.get("model")},
+                    )
+                )
         # Close a thinking block pi did not terminate explicitly; keep the text it emitted.
         for index, accum in sorted(self._thinking.items()):
             if accum.text:

@@ -1243,6 +1243,89 @@ def _str_or_none(value: Any) -> str | None:
     return value if isinstance(value, str) else None
 
 
+def _int_number(value: Any) -> int:
+    if isinstance(value, bool):
+        return 0
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _cost_number(value: Any) -> float:
+    if isinstance(value, dict):
+        value = value.get("total") or value.get("cost") or 0
+    if isinstance(value, bool):
+        return 0.0
+    try:
+        return float(value or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def normalize_usage(value: Any) -> dict[str, Any]:
+    """Return a complete TokenUsage-shaped dict from a pi ``usage`` object."""
+    if not isinstance(value, dict):
+        return {
+            "input": 0,
+            "output": 0,
+            "cache_read": 0,
+            "cache_write": 0,
+            "reasoning": 0,
+            "total_tokens": 0,
+            "cost": 0.0,
+        }
+    return {
+        "input": _int_number(value.get("input")),
+        "output": _int_number(value.get("output")),
+        "cache_read": _int_number(value.get("cacheRead", value.get("cache_read"))),
+        "cache_write": _int_number(value.get("cacheWrite", value.get("cache_write"))),
+        "reasoning": _int_number(value.get("reasoning")),
+        "total_tokens": _int_number(value.get("totalTokens", value.get("total_tokens"))),
+        "cost": _cost_number(value.get("cost")),
+    }
+
+
+def add_usage(total: dict[str, Any], value: Any) -> dict[str, Any]:
+    one = normalize_usage(value)
+    for key in ("input", "output", "cache_read", "cache_write", "reasoning", "total_tokens"):
+        total[key] = int(total.get(key, 0)) + int(one[key])
+    total["cost"] = float(total.get("cost", 0.0)) + float(one["cost"])
+    return total
+
+
+def _run_usage(rows: list[sqlite3.Row], meta: dict[str, Any]) -> dict[str, Any]:
+    """Per-run usage: the finish metadata block, else sum of message_end usages.
+
+    The finish block is authoritative so a run's usage survives later transcript
+    truncation/pruning; older runs that predate the aggregation are recomputed from the
+    ``worker_message`` rows that already carried pi's usage.
+    """
+    if isinstance(meta.get("usage"), dict):
+        return normalize_usage(meta["usage"])
+    total = normalize_usage(None)
+    for row in rows:
+        if row["kind"] != "worker_message":
+            continue
+        usage = _metadata(row).get("usage")
+        if isinstance(usage, dict):
+            add_usage(total, usage)
+    return total
+
+
+def _run_model(rows: list[sqlite3.Row], meta: dict[str, Any]) -> str | None:
+    model = _str_or_none(meta.get("model"))
+    if model:
+        return model
+    for row in reversed(rows):
+        if row["kind"] != "worker_message":
+            continue
+        candidate = _str_or_none(_metadata(row).get("model"))
+        if candidate:
+            return candidate
+    return None
+
+
 def _worker_item(
     project_id: str,
     run_id: str,
@@ -1347,6 +1430,8 @@ def _worker_item(
         "duration_ms": duration_ms,
         "error": error,
         "session": _str_or_none(meta.get("session")),
+        "model": _run_model(rows, meta),
+        "usage": _run_usage(rows, meta),
         "transcript_truncated": truncated,
         "counts": counts,
         "transcript": transcript,

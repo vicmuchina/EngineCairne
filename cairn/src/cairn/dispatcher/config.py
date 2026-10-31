@@ -171,6 +171,14 @@ class RuntimeConfig(BaseModel):
     worker_healthcheck: WorkerHealthcheckMode = "startup_only"
     execution: ExecutionMode = "container"
     prompt_group: str = Field(min_length=1)
+    # A scheduler iteration that makes no progress for this long is wedged: log CRITICAL and
+    # exit(75) so systemd (Restart=always) replaces the process with a clean one.
+    watchdog_seconds: int = Field(default=120, ge=1)
+    # Release claims whose intent has no active worker_run and whose heartbeat is older than
+    # this. Never touches concluded intents or the project status.
+    claim_stale_seconds: int = Field(default=1800, ge=1)
+    # How often the dispatcher asks the server to reconcile stale claims (0 = startup only).
+    claim_reconcile_interval: int = Field(default=300, ge=0)
 
 
 class WorkerConfig(BaseModel):

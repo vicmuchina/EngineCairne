@@ -12,6 +12,15 @@ from requests.adapters import HTTPAdapter
 from cairn.server.models import Intent, ProjectDetail, ProjectSummary, Settings
 
 LOG = logging.getLogger(__name__)
+# Every dispatcher HTTP call must be bounded: a stuck server socket must never freeze the
+# scheduling loop. requests applies connect/read separately; the scheduler watchdog caps a
+# pathologically slow trickle.
+DEFAULT_CONNECT_TIMEOUT_SECONDS = 5.0
+DEFAULT_READ_TIMEOUT_SECONDS = 15.0
+DEFAULT_TIMEOUT: tuple[float, float] = (
+    DEFAULT_CONNECT_TIMEOUT_SECONDS,
+    DEFAULT_READ_TIMEOUT_SECONDS,
+)
 
 
 class ProtocolError(RuntimeError):
@@ -33,9 +42,14 @@ class ApiResult:
 
 
 class CairnClient:
-    def __init__(self, base_url: str, timeout: float = 10.0):
+    def __init__(
+        self,
+        base_url: str,
+        timeout: float | tuple[float, float] | None = None,
+    ):
         self._base_url = base_url.rstrip("/")
-        self._timeout = timeout
+        # Explicit short timeouts everywhere in dispatcher paths: connect <= 5 s, read <= 15 s.
+        self._timeout: float | tuple[float, float] = DEFAULT_TIMEOUT if timeout is None else timeout
         self._summary_adapter = TypeAdapter(list[ProjectSummary])
         self._local = threading.local()
         self._sessions: dict[int, requests.Session] = {}
@@ -220,6 +234,18 @@ class CairnClient:
                 "error": error,
                 "metadata": metadata,
             },
+        )
+
+    def reconcile_claims(
+        self,
+        project_id: str,
+        *,
+        stale_seconds: int,
+    ) -> ApiResult:
+        return self._request_json(
+            "POST",
+            f"/projects/{project_id}/claims/reconcile",
+            json={"claim_stale_seconds": stale_seconds},
         )
 
     def close_worker_run(
