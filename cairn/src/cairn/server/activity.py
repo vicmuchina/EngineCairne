@@ -1472,6 +1472,7 @@ def build_project_workers(
     *,
     worker: str | None = None,
     run_id: str | None = None,
+    exclude_task: str | None = None,
     active_only: bool = False,
     include_transcript: bool = True,
     limit: int = 20,
@@ -1496,17 +1497,23 @@ def build_project_workers(
         # a long-running run older than the recent page is never hidden). Without this a
         # project that has accumulated many worker runs would rescan its whole transcript
         # history on every 1 s UI poll.
+        task_filter = (
+            " AND json_extract(metadata, '$.task') IS NOT ?" if exclude_task is not None else ""
+        )
+        task_params = [exclude_task] if exclude_task is not None else []
         recent = conn.execute(
             "SELECT run_id, MAX(id) AS last_id FROM project_activity "
-            f"WHERE project_id = ? AND run_id IS NOT NULL{worker_filter} "
+            "WHERE project_id = ? AND run_id IS NOT NULL AND kind = 'worker_run'"
+            f"{worker_filter}{task_filter} "
             "GROUP BY run_id ORDER BY last_id DESC LIMIT ?",
-            (project_id, *([worker] if worker is not None else []), max(limit * 4, 50)),
+            (project_id, *([worker] if worker is not None else []), *task_params, max(limit * 4, 50)),
         ).fetchall()
         open_ids = conn.execute(
             "SELECT DISTINCT run_id FROM project_activity "
-            f"WHERE project_id = ? AND run_id IS NOT NULL{worker_filter} "
+            "WHERE project_id = ? AND run_id IS NOT NULL AND kind = 'worker_run'"
+            f"{worker_filter}{task_filter} "
             f"AND status IN ({', '.join('?' for _ in WORKER_OPEN_STATUSES)})",
-            (project_id, *([worker] if worker is not None else []), *WORKER_OPEN_STATUSES),
+            (project_id, *([worker] if worker is not None else []), *task_params, *WORKER_OPEN_STATUSES),
         ).fetchall()
         run_ids = list(dict.fromkeys([row["run_id"] for row in recent] +
                                      [row["run_id"] for row in open_ids]))

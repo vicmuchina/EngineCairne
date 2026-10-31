@@ -44,6 +44,7 @@ router = APIRouter(tags=["workers"])
 def list_project_workers(
     project_id: str,
     worker: str | None = Query(default=None, description="Filter by worker name"),
+    exclude_task: str | None = Query(default=None, description="Exclude runs by task (e.g. reason)"),
     run_id: str | None = Query(default=None, description="Filter by exact run id"),
     active_only: bool = Query(default=False, description="Only runs still active (not stale)"),
     include_transcript: bool = Query(default=True, description="Include the transcript steps"),
@@ -62,6 +63,7 @@ def list_project_workers(
             project_id,
             worker=worker,
             run_id=run_id,
+            exclude_task=exclude_task,
             active_only=active_only,
             include_transcript=include_transcript,
             limit=limit,

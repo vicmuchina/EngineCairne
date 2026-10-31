@@ -827,3 +827,34 @@ def test_explore_timeout_closes_the_run_as_timeout(tmp_path: Path, monkeypatch) 
     assert result["outcome"] == "failed"
     close = next(a for a in client.activities if a.get("kind") == "close")
     assert close["status"] == "timeout"
+
+
+def test_worker_exclude_task_keeps_explore_sessions_visible(client: TestClient) -> None:
+    """A long planner history must not crowd explore runs out of the sessions rail.
+
+    Regression: /sessions fetched the newest N worker runs (all `reason`), then filtered
+    them out, so a project with hundreds of planner rounds showed an empty Workers lane.
+    """
+    project_id = _project(client)
+    _seed_run(client, project_id, "run-explore")
+    for index in range(60):
+        _activity(
+            client,
+            project_id,
+            kind="worker_run",
+            title="reason worker started",
+            status="done",
+            actor="pi-1",
+            run_id=f"run-reason-{index}",
+            metadata={"task": "reason"},
+        )
+
+    workers = client.get(
+        f"/projects/{project_id}/workers?exclude_task=reason&limit=5"
+    ).json()
+    assert workers["items"], workers
+    assert all(item["task"] != "reason" for item in workers["items"])
+
+    sessions = client.get(f"/projects/{project_id}/sessions").json()
+    worker_keys = [s["key"] for s in sessions["sessions"] if s["role"] == "worker"]
+    assert "worker:run-explore" in worker_keys, worker_keys

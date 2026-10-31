@@ -256,6 +256,7 @@ def _worker_sessions(conn: sqlite3.Connection, project_id: str, *, now: float) -
         conn,
         project_id,
         include_transcript=False,
+        exclude_task="reason",
         limit=100,
         transcript_limit=0,
         stale_after_seconds=SESSION_STALE_SECONDS,
