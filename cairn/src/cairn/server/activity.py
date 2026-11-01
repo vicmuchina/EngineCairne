@@ -1131,6 +1131,8 @@ def _event_items(
     *,
     after_ts: str | None,
     after_id: int = 0,
+    before_ts: str | None = None,
+    before_id: int = 0,
     fetch_limit: int,
     sql_kinds: list[str] | None = None,
     descending: bool = False,
@@ -1140,8 +1142,13 @@ def _event_items(
         # created_at has second resolution: rows sharing the cursor's second must not be
         # skipped, so the id is used as the tie-break inside the same timestamp.
         "AND (? IS NULL OR created_at > ? OR (created_at = ? AND id > ?))"
+        "AND (? IS NULL OR created_at < ? OR (created_at = ? AND id < ?))"
     )
-    params: list[Any] = [project_id, after_ts, after_ts, after_ts, after_id]
+    params: list[Any] = [
+        project_id,
+        after_ts, after_ts, after_ts, after_id,
+        before_ts, before_ts, before_ts, before_id,
+    ]
     if sql_kinds is not None:
         if not sql_kinds:
             return []
@@ -1162,6 +1169,8 @@ def _chat_items(
     *,
     after_ts: str | None,
     after_id: int = 0,
+    before_ts: str | None = None,
+    before_id: int = 0,
     fetch_limit: int,
     sql_kinds: list[str] | None = None,
     descending: bool = False,
@@ -1180,11 +1189,18 @@ def _chat_items(
           AND a.kind IN ({placeholders})
           AND (a.role IS NULL OR a.role != 'system')
           AND (? IS NULL OR a.created_at > ? OR (a.created_at = ? AND a.id > ?))
+          AND (? IS NULL OR a.created_at < ? OR (a.created_at = ? AND a.id < ?))
         ORDER BY {'a.created_at DESC, a.id DESC' if descending else 'a.created_at, a.id'}
         LIMIT ?
     """
     rows = conn.execute(
-        query, (project_id, *kinds, after_ts, after_ts, after_ts, after_id, fetch_limit)
+        query,
+        (
+            project_id, *kinds,
+            after_ts, after_ts, after_ts, after_id,
+            before_ts, before_ts, before_ts, before_id,
+            fetch_limit,
+        ),
     ).fetchall()
     items = []
     for row in rows:
@@ -1672,14 +1688,34 @@ def update_worker_activity(
     ).fetchone()
 
 
+def _compact_feed_value(value: Any, *, string_limit: int = 180) -> Any:
+    """Bound each metadata string so a read-only board never ships megabytes per row.
+
+    The Broadcast board renders previews, not evidence bodies; the full tool output stays
+    available through the sessions/transcript endpoints.
+    """
+    if isinstance(value, str):
+        return value if len(value) <= string_limit else value[:string_limit] + "…"
+    if isinstance(value, list):
+        return [_compact_feed_value(item, string_limit=string_limit) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: _compact_feed_value(item, string_limit=string_limit)
+            for key, item in value.items()
+        }
+    return value
+
+
 def build_project_activity(
     conn: sqlite3.Connection,
     project_id: str,
     *,
     after: str | None = None,
+    before: str | None = None,
     limit: int = 50,
     kinds: list[str] | None = None,
     newest_first: bool = False,
+    compact: bool = False,
 ) -> dict[str, Any]:
     """Merge facts, intents, hints, project events and chat activities chronologically.
 
@@ -1688,10 +1724,18 @@ def build_project_activity(
     feed, and every item carries a non-null cursor (``~#<id>`` when it has no timestamp).
     """
     cursor = _parse_cursor(after)
+    before_cursor = _parse_cursor(before)
     after_ts = cursor[0] if cursor and cursor[0] != NULL_TS_SENTINEL else None
+    before_ts = (
+        before_cursor[0]
+        if before_cursor and before_cursor[0] != NULL_TS_SENTINEL
+        else None
+    )
     fetch_limit = max(limit * 4, 200)
     event_after_id = _after_sql_id(cursor[1], "event:") if cursor else 0
     chat_after_id = _after_sql_id(cursor[1], "chat:") if cursor else 0
+    event_before_id = _after_sql_id(before_cursor[1], "event:") if before_cursor else 0
+    chat_before_id = _after_sql_id(before_cursor[1], "chat:") if before_cursor else 0
 
     wanted = set(kinds) if kinds else None
 
@@ -1699,7 +1743,8 @@ def build_project_activity(
         return wanted is None or kind in wanted
 
     # Newest-N reads the newest rows from SQL; the merge below re-sorts ascending anyway.
-    descending = newest_first and cursor is None
+    # A before cursor walks backwards through history; the SQL must then scan descending.
+    descending = newest_first
 
     event_kinds: list[str] | None = None
     chat_kinds: list[str] | None = None
@@ -1728,6 +1773,8 @@ def build_project_activity(
                 project_id,
                 after_ts=after_ts,
                 after_id=event_after_id,
+                before_ts=before_ts,
+                before_id=event_before_id,
                 fetch_limit=fetch_limit,
                 sql_kinds=event_kinds,
                 descending=descending,
@@ -1741,6 +1788,8 @@ def build_project_activity(
                 project_id,
                 after_ts=after_ts,
                 after_id=chat_after_id,
+                before_ts=before_ts,
+                before_id=chat_before_id,
                 fetch_limit=fetch_limit,
                 sql_kinds=chat_kinds,
                 descending=descending,
@@ -1755,6 +1804,15 @@ def build_project_activity(
             items = [item for item in items if _sort_key(item) < key]
         else:
             items = [item for item in items if _sort_key(item) > key]
+    if before_cursor is not None:
+        key = _cursor_key(before_cursor)
+        items = [item for item in items if _sort_key(item) < key]
+    if compact:
+        for item in items:
+            item["metadata"] = _compact_feed_value(item.get("metadata") or {})
+            description = item.get("description")
+            if isinstance(description, str) and len(description) > 400:
+                item["description"] = description[:400] + "…"
     has_more = len(items) > limit
     if newest_first:
         # Newest first. Rows without a timestamp are the least useful in a "recent

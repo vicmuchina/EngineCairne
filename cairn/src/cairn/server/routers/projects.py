@@ -170,15 +170,25 @@ def get_project(project_id: str):
 def project_activity(
     project_id: str,
     after: str | None = Query(default=None, description="Cursor from a previous next_cursor"),
+    before: str | None = Query(default=None, description="Cursor for walking backwards through history"),
+    newest_first: bool = Query(default=False, description="Return the newest page (descending)"),
     limit: int = Query(default=50, ge=1, le=500),
     kinds: str | None = Query(default=None, description="Comma-separated feed kinds"),
+    compact: bool = Query(default=False, description="Bound metadata strings for the activity board"),
 ):
     """Unified chronological feed: facts, intents, hints, worker/steering/approval events, chat."""
     with get_conn() as conn:
         get_project_or_404(conn, project_id)
         kind_list = [item.strip() for item in kinds.split(",") if item.strip()] if kinds else None
         payload = activity_store.build_project_activity(
-            conn, project_id, after=after, limit=limit, kinds=kind_list
+            conn,
+            project_id,
+            after=after,
+            before=before,
+            limit=limit,
+            kinds=kind_list,
+            newest_first=newest_first,
+            compact=compact,
         )
         return ProjectActivityFeed(**payload)
 
