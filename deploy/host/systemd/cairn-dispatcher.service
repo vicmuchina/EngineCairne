@@ -1,0 +1,24 @@
+[Unit]
+Description=Cairn dispatcher (runs pi workers as host processes)
+After=cairn-server.service
+Wants=cairn-server.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/vic/.local/share/artex-tools/cairn
+ExecStart=/home/vic/.local/share/artex-tools/cairn/cairn/.venv/bin/cairn dispatch --config /home/vic/.local/share/artex-tools/cairn/dispatch.yaml
+Restart=always
+RestartSec=10
+# OOM incident 2026-10-29: 10.8G RSS / 51.9G swap peak.
+# Keep a runaway Pi worker inside a CGroup instead of exhausting the laptop.
+MemoryAccounting=yes
+MemoryHigh=2G
+MemoryMax=3G
+MemorySwapMax=1G
+TasksMax=256
+OOMPolicy=stop
+Environment=PATH=/home/vic/.local/share/artex-tools/cairn/cairn/.venv/bin:/home/vic/.local/bin:/home/vic/.nvm/versions/node/v22.22.2/bin:/usr/local/bin:/usr/bin:/bin
+Environment=HOME=/home/vic
+
+[Install]
+WantedBy=default.target

@@ -229,3 +229,21 @@ This project is licensed under **GNU AGPLv3** for personal and educational use.
 **Commercial Use**: If you wish to use this project in a commercial or proprietary environment without the AGPL-3.0 open-source obligations, **please contact me to obtain a commercial license.**
 
 **Contributions**: By submitting a Pull Request, you agree that your contributions may be used under both the AGPL-3.0 and the project's commercial license.
+
+---
+
+## This fork: engine + console + deployment
+
+`EngineCairne` is a complete, reproducible Cairn stack, not just the engine:
+
+| Path | Contents |
+|---|---|
+| `cairn/` | engine (FastAPI + SQLite + dispatcher), upstream `oritera/Cairn` with our RUNTIME-V4 and domain-layer changes |
+| `console/` | Next.js production console (Artex-parity UI, sessions v2, domain tabs) |
+| `deploy/` | systemd/nginx/dispatcher deployment snapshot + examples |
+| `docs/` | `DOMAIN-LAYER.md`, `SESSIONS-V2.md`, `RUNTIME-V4.md`, `CAIRN-STACK.md` |
+| `scripts/` | `import_artex_domain.py` for imported Artex corpora |
+
+One guide rebuilds all of it: [`REPLICATE.md`](REPLICATE.md). Engine-only details remain in
+[`cairn/REPLICATE.md`](cairn/REPLICATE.md); console details are in
+[`console/DEPLOY.md`](console/DEPLOY.md).

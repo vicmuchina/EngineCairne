@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="cairn" x1="10" y1="54" x2="54" y2="10" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8b5cf6"/>
+      <stop offset="1" stop-color="#3b82f6"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#0b0b0c"/>
+  <g fill="url(#cairn)">
+    <rect x="12" y="42" width="40" height="9" rx="4.5"/>
+    <rect x="18" y="31" width="28" height="8" rx="4"/>
+    <rect x="24" y="21" width="16" height="7" rx="3.5"/>
+  </g>
+</svg>

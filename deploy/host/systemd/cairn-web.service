@@ -1,0 +1,17 @@
+[Unit]
+Description=Cairn web console (Next.js production on :3001)
+After=cairn-server.service
+Wants=cairn-server.service
+
+[Service]
+Type=simple
+WorkingDirectory=/home/vic/Projects/.arx/research/cairn-web
+Environment=NODE_ENV=production
+Environment=PATH=/home/vic/.nvm/versions/node/v22.22.2/bin:/usr/local/bin:/usr/bin:/bin
+Environment=HOME=/home/vic
+ExecStart=/home/vic/Projects/.arx/research/cairn-web/node_modules/.bin/next start -p 3001
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

@@ -3,12 +3,25 @@
 An agent-executable guide. Every step has a **check**; do not continue past a failed check.
 Tested on Ubuntu 24.04 with Python 3.12.3, Node 22, `pi` 1.4.0, SQLite 3.45.
 
-Cairn has three movable parts:
+Cairn has four movable parts; all of them live in this repository:
 
 ```
-cairn serve      → FastAPI + SQLite (the fact/intent graph, chat, worker API)
+cairn/           → engine: FastAPI + SQLite (fact/intent graph, chat, worker API)
 cairn dispatch   → scheduler that runs worker CLIs (pi by default)
 worker CLI (pi)  → one process per intent; streams JSONL back into the graph
+console/         → Next.js production console (Artex-parity UI)
+deploy/          → systemd units, nginx configs and the dispatcher config used in production
+scripts/         → import_artex_domain.py (project an imported Artex corpus into the domain layer)
+```
+
+Layout:
+
+```text
+cairn/       engine source + its own REPLICATE/tests
+console/     web console source (build with npm ci && npm run build)
+deploy/      host deployment snapshot (systemd, nginx, dispatch.yaml) + examples
+docs/        DOMAIN-LAYER, SESSIONS-V2, RUNTIME-V4, CAIRN-STACK
+scripts/     maintenance/import helpers
 ```
 
 Nothing is cloud-hosted and there are no mandatory secrets in this repository.
@@ -376,3 +389,65 @@ migrates in place. Nothing about facts, intents or hints changes.
 `GET /projects/{id}` gains `entities`, `findings`, `retests` and `coverage`. The console shows
 **Test assets**, **Asset coverage**, **Retests** and first-class **Findings** only when that
 data exists; a facts-only project keeps the original seven tabs. There are no profiles.
+
+
+---
+
+## 10. Build the console
+
+The console is a Next.js production build; do **not** ship `next dev`.
+
+```bash
+cd cairn-src/console
+npm ci
+CAIRN_API=http://127.0.0.1:8000 npm run build
+CAIRN_API=http://127.0.0.1:8000 npm start -- -p 3001
+```
+
+**Check:** `curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3001/projects` prints `200`.
+
+The console reads `GET /projects/{id}` (including the additive `entities`, `findings`,
+`retests`, `coverage` fields), the sessions API and the activity feed. The full data
+contract is in `console/DEPLOY.md`; the domain layer is documented in `docs/DOMAIN-LAYER.md`.
+
+---
+
+## 11. Run the whole stack as services
+
+`deploy/host/` is the exact snapshot from this machine. Adjust the absolute paths
+(`/home/vic/...`) and the node path, then install:
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp deploy/host/systemd/cairn-server.service \
+   deploy/host/systemd/cairn-dispatcher.service \
+   deploy/host/systemd/cairn-web.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now cairn-server cairn-dispatcher cairn-web
+```
+
+**Check:** `systemctl --user is-active cairn-server cairn-dispatcher cairn-web` prints three
+`active` lines; `curl -s 127.0.0.1:8000/projects` returns JSON.
+
+For nginx + Cloudflare Tunnel and the failure playbook, see `docs/CAIRN-STACK.md`.
+`deploy/dispatch.local.yaml` and `deploy/pi/models.example.json` are starting points for the
+dispatcher; `deploy/host/dispatch.yaml` is the production copy.
+
+---
+
+## 12. Bring an imported Artex corpus into the domain layer
+
+Imported Artex tasks store findings as facts (`ARTEX FINDING #N — ...`). The domain layer
+wants first-class findings and entities, so the import helper derives them **only from
+recorded evidence** (no scanning, no invented assets):
+
+```bash
+python scripts/import_artex_domain.py --project proj_005 --dry-run   # inspect
+python scripts/import_artex_domain.py --project proj_005             # upsert
+```
+
+It creates one finding per `ARTEX FINDING #` fact, extracts hosts/URLs/IPs from
+`Assets:` lines and `*.sasakonnect.net` references, anchors every entity to the fact that
+mentions it, and parents URL entities to their host. It is idempotent. Re-running is safe.
+
+**Check:** `curl -s 127.0.0.1:8000/projects/<id> | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d['entities']), len(d['findings']))"` prints non-zero counts, and the console shows **Test assets**, **Asset coverage**, **Retests**.

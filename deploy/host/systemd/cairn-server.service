@@ -1,0 +1,15 @@
+[Unit]
+Description=Cairn API server (fact-graph exploration engine)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/vic/.local/share/artex-tools/cairn/cairn
+ExecStart=/home/vic/.local/share/artex-tools/cairn/cairn/.venv/bin/cairn serve --host 127.0.0.1 --port 8000 --db-path /home/vic/.local/share/artex-tools/cairn/data/cairn.db --no-access-log
+Restart=always
+RestartSec=5
+Environment=PATH=/home/vic/.local/share/artex-tools/cairn/cairn/.venv/bin:/home/vic/.local/bin:/home/vic/.nvm/versions/node/v22.22.2/bin:/usr/local/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=default.target

@@ -4,3 +4,7 @@ __pycache__/
 .playwright-cli/
 datas/
 dispatch.yaml
+
+console/node_modules/
+console/.next/
+console/tsconfig.tsbuildinfo
