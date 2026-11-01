@@ -5,11 +5,11 @@ Wants=cairn-server.service
 
 [Service]
 Type=simple
-WorkingDirectory=/home/vic/Projects/.arx/research/cairn-web
+WorkingDirectory=/home/vic/Projects/.arx/research/cairn/console
 Environment=NODE_ENV=production
 Environment=PATH=/home/vic/.nvm/versions/node/v22.22.2/bin:/usr/local/bin:/usr/bin:/bin
 Environment=HOME=/home/vic
-ExecStart=/home/vic/Projects/.arx/research/cairn-web/node_modules/.bin/next start -p 3001
+ExecStart=/home/vic/Projects/.arx/research/cairn/console/node_modules/.bin/next start -p 3001
 Restart=always
 RestartSec=5
 
