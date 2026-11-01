@@ -93,8 +93,9 @@ def run_explore_task(
                 return "unhealthy"
 
         steering = fetch_pending_steering(client, project.project.id, intent_id=intent.id)
+        is_retest = getattr(intent, "kind", "explore") == "retest"
         prompt = render_prompt(
-            load_prompt(config.runtime.prompt_group, "explore.md"),
+            load_prompt(config.runtime.prompt_group, "retest.md" if is_retest else "explore.md"),
             {
                 "graph_yaml": write_graph_snapshot_reference(
                     container_manager,
@@ -104,6 +105,9 @@ def run_explore_task(
                 ),
                 "intent_id": intent.id,
                 "intent_description": intent.description,
+                "retest_of": getattr(intent, "retest_of", None) or "",
+                "project_id": project.project.id,
+                "api_base": config.server.rstrip("/"),
                 "steering": format_steering(steering),
             },
         )

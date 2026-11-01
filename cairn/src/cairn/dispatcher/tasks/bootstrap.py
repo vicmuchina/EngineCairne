@@ -92,9 +92,17 @@ def run_bootstrap_task(
                 best_effort_release(client, project.project.id, intent.id, worker.name)
                 return "unhealthy"
 
+        replacements = _bootstrap_prompt_replacements(project)
+        replacements.update(
+            {
+                "project_id": project.project.id,
+                "api_base": config.server.rstrip("/"),
+                "intent_id": intent.id,
+            }
+        )
         prompt = render_prompt(
             load_prompt(config.runtime.prompt_group, "bootstrap.md"),
-            _bootstrap_prompt_replacements(project),
+            replacements,
         )
 
         session = driver.prepare_session()

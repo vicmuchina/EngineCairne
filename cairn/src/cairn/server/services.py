@@ -163,6 +163,8 @@ def intent_to_model(conn: sqlite3.Connection, row: sqlite3.Row, project_id: str)
         created_at=row["created_at"],
         concluded_at=row["concluded_at"],
         priority=row["priority"] if "priority" in row.keys() else 0,
+        kind=(row["kind"] if "kind" in row.keys() and row["kind"] else "explore"),
+        retest_of=(row["retest_of"] if "retest_of" in row.keys() else None),
     )
 
 
@@ -256,3 +258,15 @@ def expire_reason_leases(conn: sqlite3.Connection, project_id: str | None = None
         query = query.replace("WHERE ", "WHERE id = ? AND ", 1)
         params = (project_id, now, timeout)
     conn.execute(query, params)
+
+
+def next_entity_id(conn: sqlite3.Connection, project_id: str) -> str:
+    return _next_scoped_id(conn, "entity", "e", project_id)
+
+
+def next_finding_id(conn: sqlite3.Connection, project_id: str) -> str:
+    return _next_scoped_id(conn, "finding", "fd", project_id)
+
+
+def next_retest_id(conn: sqlite3.Connection, project_id: str) -> str:
+    return _next_scoped_id(conn, "retest", "rt", project_id)

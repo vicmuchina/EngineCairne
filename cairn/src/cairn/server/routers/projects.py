@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 
 from cairn.server import activity as activity_store
+from cairn.server import domain as domain_store
 from cairn.server.claims import reconcile_claims
 from cairn.server.db import get_conn
 from cairn.server.models import (
@@ -161,6 +162,7 @@ def get_project(project_id: str):
             facts=[Fact(**dict(f)) for f in facts],
             intents=build_intents(conn, project_id),
             hints=[Hint(**dict(h)) for h in hints],
+            **domain_store.domain_bundle(conn, project_id),
         )
 
 

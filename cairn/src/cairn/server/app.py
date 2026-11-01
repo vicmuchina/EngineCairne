@@ -12,6 +12,7 @@ from cairn.server import chat_runtime, db, pi_rpc
 from cairn.server.routers import (
     approvals,
     chat,
+    domain,
     export,
     hints,
     intents,
@@ -81,6 +82,7 @@ app.include_router(approvals.router)
 app.include_router(export.router)
 app.include_router(chat.router)
 app.include_router(workers.router)
+app.include_router(domain.router)
 app.include_router(sessions.router)
 app.include_router(report.router)
 

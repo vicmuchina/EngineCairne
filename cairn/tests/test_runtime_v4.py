@@ -963,7 +963,7 @@ def test_report_endpoint_renders_deterministic_sections(client: TestClient) -> N
         "## Goal",
         "## Operator constraints",
         "## Results at a glance",
-        "## Confirmed findings",
+        "## Confirmed facts",
         "## Intent ledger",
         "## Verification & reproducibility",
         "## Retest plan",

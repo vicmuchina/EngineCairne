@@ -26,6 +26,9 @@ class Intent(BaseModel):
     created_at: str
     concluded_at: str | None = None
     priority: int = 0
+    # Domain layer: "explore" (default) or "retest" (re-verifies a finding).
+    kind: str = "explore"
+    retest_of: str | None = None
 
     model_config = {"populate_by_name": True}
 
@@ -66,6 +69,11 @@ class ProjectDetail(BaseModel):
     facts: list[Fact]
     intents: list[Intent]
     hints: list[Hint]
+    # Domain layer (additive; empty for projects that do not use it).
+    entities: list["Entity"] = Field(default_factory=list)
+    findings: list["Finding"] = Field(default_factory=list)
+    retests: list["Retest"] = Field(default_factory=list)
+    coverage: "Coverage | None" = None
 
 
 class CreateHintInline(BaseModel):
@@ -116,6 +124,9 @@ class CreateIntentRequest(BaseModel):
     creator: str
     worker: str | None = None
     priority: int = Field(default=0, ge=0)
+    # "explore" (default) or "retest" (re-verifies a finding).
+    kind: str = Field(default="explore", pattern="^(explore|retest)$")
+    retest_of: str | None = None
 
     model_config = {"populate_by_name": True}
 
@@ -625,3 +636,182 @@ class ApprovalPolicy(BaseModel):
 class ApprovalList(BaseModel):
     items: list[ApprovalItem]
     pending: int
+
+
+# ---------------------------------------------------------------- domain layer
+# Generalized Artex objects: entities (assets), findings (claims), retests
+# (verification replays). All are optional; the core fact/intent graph does not
+# require them.
+
+SEVERITIES = ("critical", "high", "medium", "low", "info")
+FINDING_STATUSES = (
+    "pending",
+    "in_progress",
+    "confirmed",
+    "resolved",
+    "fixed",
+    "false_positive",
+    "ignored",
+    "duplicate",
+    "risk_accepted",
+)
+RETEST_STATUSES = ("pending", "running", "completed", "failed", "stopped")
+RETEST_VERDICTS = ("reproduced", "fixed", "inconclusive")
+
+
+class Entity(BaseModel):
+    id: str
+    project_id: str
+    kind: str
+    key: str
+    label: str = ""
+    parent_id: str | None = None
+    in_scope: bool = True
+    status: str = "discovered"
+    source: str = "worker"
+    metadata: dict = Field(default_factory=dict)
+    created_at: str
+    last_seen_at: str
+    fact_count: int = 0
+    tested: bool = False
+
+
+class CreateEntityRequest(BaseModel):
+    kind: str = Field(min_length=1, max_length=64)
+    key: str = Field(min_length=1, max_length=512)
+    label: str = ""
+    parent_id: str | None = None
+    parent_key: str | None = None
+    # None = keep the existing value (new entities default to in scope / discovered).
+    in_scope: bool | None = None
+    status: str | None = None
+    source: str = "worker"
+    metadata: dict = Field(default_factory=dict)
+    facts: list[str] = Field(default_factory=list)
+    intent_id: str | None = None
+
+
+class CreateEntityBatchRequest(BaseModel):
+    entities: list[CreateEntityRequest] = Field(min_length=1, max_length=500)
+
+
+class UpdateEntityRequest(BaseModel):
+    label: str | None = None
+    parent_id: str | None = None
+    in_scope: bool | None = None
+    status: str | None = None
+    metadata: dict | None = None
+
+
+class Finding(BaseModel):
+    id: str
+    project_id: str
+    fact_id: str | None = None
+    intent_id: str | None = None
+    entity_id: str | None = None
+    title: str = ""
+    klass: str = ""
+    severity: str = ""
+    summary: str = ""
+    evidence: str = ""
+    status: str = "pending"
+    worker: str = ""
+    metadata: dict = Field(default_factory=dict)
+    report: str = ""
+    created_at: str
+    updated_at: str
+    entity_ids: list[str] = Field(default_factory=list)
+    retests: list[dict] = Field(default_factory=list)
+
+
+class CreateFindingRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=512)
+    klass: str = ""
+    severity: str = ""
+    summary: str = ""
+    evidence: str = ""
+    status: str = "pending"
+    worker: str = ""
+    fact_id: str | None = None
+    intent_id: str | None = None
+    entity_id: str | None = None
+    entities: list[str] = Field(default_factory=list)
+    metadata: dict = Field(default_factory=dict)
+
+
+class UpdateFindingRequest(BaseModel):
+    title: str | None = None
+    klass: str | None = None
+    severity: str | None = None
+    summary: str | None = None
+    evidence: str | None = None
+    status: str | None = None
+    report: str | None = None
+    metadata: dict | None = None
+
+
+class Retest(BaseModel):
+    id: str
+    project_id: str
+    finding_id: str
+    intent_id: str | None = None
+    run_id: str | None = None
+    status: str = "pending"
+    verdict: str = ""
+    notes: str = ""
+    snapshot: dict = Field(default_factory=dict)
+    summary: str = ""
+    evidence: str = ""
+    error: str = ""
+    created_at: str
+    started_at: str | None = None
+    finished_at: str | None = None
+
+
+class CreateRetestRequest(BaseModel):
+    notes: str = ""
+    worker: str = "human"
+
+
+class RetestResultRequest(BaseModel):
+    verdict: str = ""
+    summary: str = ""
+    evidence: str = ""
+    notes: str = ""
+    status: str = "completed"
+
+
+class CoverageByKind(BaseModel):
+    kind: str
+    total: int
+    tested: int
+
+
+class Coverage(BaseModel):
+    enabled: bool = True
+    scope_rows: int = 0
+    denominator: int = 0
+    tested: int = 0
+    pct: float | None = None
+    by_kind: list[CoverageByKind] = Field(default_factory=list)
+    untested: list[dict] = Field(default_factory=list)
+
+
+class CoverageGraphNode(BaseModel):
+    key: str
+    id: str | None = None
+    kind: str
+    label: str
+    tested: bool = False
+    in_scope: bool = True
+    parent_id: str | None = None
+
+
+class CoverageGraphEdge(BaseModel):
+    src: str
+    dst: str
+
+
+class CoverageGraphData(BaseModel):
+    nodes: list[CoverageGraphNode] = Field(default_factory=list)
+    edges: list[CoverageGraphEdge] = Field(default_factory=list)

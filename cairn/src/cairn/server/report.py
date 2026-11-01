@@ -184,7 +184,13 @@ def build_project_report(conn: sqlite3.Connection, project_id: str) -> dict[str,
     ).fetchone()
     if project is None:
         raise LookupError(project_id)
+    from cairn.server import domain as domain_store
+
     facts = _load_facts(conn, project_id)
+    entities = domain_store.list_entities(conn, project_id, limit=2000)
+    findings = domain_store.list_findings(conn, project_id, limit=1000)
+    retests = domain_store.list_retests(conn, project_id, limit=1000)
+    coverage = domain_store.compute_coverage(conn, project_id, untested_limit=40)
     hints = conn.execute(
         "SELECT content, creator, created_at FROM hints WHERE project_id = ? "
         "ORDER BY created_at, rowid",
@@ -274,7 +280,11 @@ def build_project_report(conn: sqlite3.Connection, project_id: str) -> dict[str,
     lines.append("| Metric | Value |")
     lines.append("| --- | --- |")
     lines.append(f"| Facts | {counts['facts']} |")
-    lines.append(f"| Confirmed findings | {counts['findings']} |")
+    lines.append(f"| Confirmed facts | {counts['findings']} |")
+    if findings:
+        lines.append(f"| Recorded findings | {len(findings)} |")
+    if entities:
+        lines.append(f"| Entities | {len(entities)} |")
     lines.append(f"| Open intents | {counts['open_intents']} |")
     lines.append(f"| Completed intents | {counts['completed_intents']} |")
     lines.append(f"| Work runs | {counts['work_runs']} |")
@@ -289,7 +299,7 @@ def build_project_report(conn: sqlite3.Connection, project_id: str) -> dict[str,
     )
     lines.append("")
 
-    lines.append("## Confirmed findings")
+    lines.append("## Confirmed facts")
     lines.append("")
     if not produced:
         lines.append("_No findings recorded yet._")
@@ -334,6 +344,109 @@ def build_project_report(conn: sqlite3.Connection, project_id: str) -> dict[str,
         lines.append("")
         lines.append(_clip(fact["description"], MAX_DESCRIPTION))
         lines.append("")
+
+    if coverage["denominator"] or entities:
+        lines.append("## Scope and coverage")
+        lines.append("")
+        pct = f"{coverage['pct'] * 100:.1f}%" if coverage["pct"] is not None else "—"
+        lines.append(
+            f"**{coverage['tested']} / {coverage['denominator']} tested ({pct})** · "
+            f"{len(entities)} entities · {coverage['scope_rows']} in scope"
+        )
+        lines.append("")
+        if coverage["by_kind"]:
+            lines.append("| kind | tested | total |")
+            lines.append("| --- | --- | --- |")
+            for item in coverage["by_kind"]:
+                lines.append(f"| {_cell(item['kind'], 60)} | {item['tested']} | {item['total']} |")
+            lines.append("")
+        if coverage["untested"]:
+            lines.append("Untested in-scope entities (sample):")
+            lines.append("")
+            for item in coverage["untested"]:
+                lines.append(
+                    f"- [{_cell(item['kind'], 40)}] {_cell(item['label'] or item['key'], 160)} "
+                    f"({item['id']})"
+                )
+            lines.append("")
+
+    if findings:
+        lines.append("## Findings")
+        lines.append("")
+        lines.append("| id | severity | status | class | title |")
+        lines.append("| --- | --- | --- | --- | --- |")
+        for finding in findings:
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        _cell(finding["id"], 40),
+                        _cell(finding["severity"] or "-", 20),
+                        _cell(finding["status"], 40),
+                        _cell(finding["klass"] or "-", 80),
+                        _cell(finding["title"], 160),
+                    ]
+                )
+                + " |"
+            )
+        lines.append("")
+        for finding in findings:
+            lines.append(f"### {finding['id']} — {_clip(finding['title'], 200)}")
+            lines.append("")
+            meta = [
+                f"severity={finding['severity'] or 'unset'}",
+                f"status={finding['status']}",
+                f"class={finding['klass'] or 'unset'}",
+            ]
+            if finding["fact_id"]:
+                meta.append(f"fact={finding['fact_id']}")
+            if finding["entity_ids"]:
+                meta.append("entities=" + ", ".join(finding["entity_ids"][:8]))
+            lines.append("- " + " · ".join(meta))
+            if finding["summary"]:
+                lines.append("")
+                lines.append(_clip(finding["summary"], MAX_DESCRIPTION))
+            if finding["evidence"]:
+                lines.append("")
+                lines.append("Evidence:")
+                lines.append("```")
+                lines.append(_clip(finding["evidence"], MAX_DESCRIPTION))
+                lines.append("```")
+            lines.append("")
+
+    if retests:
+        lines.append("## Retests")
+        lines.append("")
+        lines.append("| retest | finding | status | verdict | started | finished |")
+        lines.append("| --- | --- | --- | --- | --- | --- |")
+        for retest in retests:
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        _cell(retest["id"], 40),
+                        _cell(retest["finding_id"], 40),
+                        _cell(retest["status"], 40),
+                        _cell(retest["verdict"] or "-", 40),
+                        _cell(retest["started_at"] or "-", 40),
+                        _cell(retest["finished_at"] or "-", 40),
+                    ]
+                )
+                + " |"
+            )
+        lines.append("")
+        for retest in retests:
+            if retest["summary"] or retest["evidence"]:
+                lines.append(f"### {retest['id']} — {retest['verdict'] or retest['status']}")
+                lines.append("")
+                if retest["summary"]:
+                    lines.append(_clip(retest["summary"], MAX_DESCRIPTION))
+                    lines.append("")
+                if retest["evidence"]:
+                    lines.append("```")
+                    lines.append(_clip(retest["evidence"], MAX_DESCRIPTION))
+                    lines.append("```")
+                    lines.append("")
 
     lines.append("## Intent ledger")
     lines.append("")

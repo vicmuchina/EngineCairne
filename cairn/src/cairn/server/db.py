@@ -225,6 +225,109 @@ CREATE INDEX IF NOT EXISTS idx_approval_requests_project
 -- Bulk expiry scans "pending rows whose expires_at has passed".
 CREATE INDEX IF NOT EXISTS idx_approval_requests_pending_expiry
     ON approval_requests (status, expires_at);
+
+-- =====================================================================
+-- Domain layer: typed entities, findings, retests (generalized Artex).
+-- Optional and additive: a project with no entities behaves as before.
+-- =====================================================================
+
+CREATE TABLE IF NOT EXISTS entities (
+    id TEXT NOT NULL,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    key TEXT NOT NULL,
+    label TEXT NOT NULL DEFAULT '',
+    parent_id TEXT,
+    in_scope INTEGER NOT NULL DEFAULT 1,
+    status TEXT NOT NULL DEFAULT 'discovered',
+    source TEXT NOT NULL DEFAULT 'worker',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    PRIMARY KEY (id, project_id),
+    UNIQUE (project_id, kind, key)
+);
+CREATE INDEX IF NOT EXISTS idx_entities_project_kind
+    ON entities (project_id, kind);
+CREATE INDEX IF NOT EXISTS idx_entities_parent
+    ON entities (project_id, parent_id);
+
+CREATE TABLE IF NOT EXISTS entity_facts (
+    entity_id TEXT NOT NULL,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    fact_id TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'worker',
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (entity_id, fact_id, project_id)
+);
+CREATE INDEX IF NOT EXISTS idx_entity_facts_fact
+    ON entity_facts (project_id, fact_id);
+
+CREATE TABLE IF NOT EXISTS entity_intents (
+    entity_id TEXT NOT NULL,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    intent_id TEXT NOT NULL,
+    relation TEXT NOT NULL DEFAULT 'tested',
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (entity_id, intent_id, project_id, relation)
+);
+CREATE INDEX IF NOT EXISTS idx_entity_intents_intent
+    ON entity_intents (project_id, intent_id);
+
+CREATE TABLE IF NOT EXISTS findings (
+    id TEXT NOT NULL,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    fact_id TEXT,
+    intent_id TEXT,
+    entity_id TEXT,
+    title TEXT NOT NULL DEFAULT '',
+    klass TEXT NOT NULL DEFAULT '',
+    severity TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    evidence TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending',
+    worker TEXT NOT NULL DEFAULT '',
+    metadata TEXT NOT NULL DEFAULT '{}',
+    report TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (id, project_id)
+);
+CREATE INDEX IF NOT EXISTS idx_findings_project_status
+    ON findings (project_id, status, created_at);
+
+CREATE TABLE IF NOT EXISTS finding_entities (
+    finding_id TEXT NOT NULL,
+    entity_id TEXT NOT NULL,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    PRIMARY KEY (finding_id, entity_id, project_id)
+);
+CREATE INDEX IF NOT EXISTS idx_finding_entities_entity
+    ON finding_entities (project_id, entity_id);
+
+CREATE TABLE IF NOT EXISTS finding_retests (
+    id TEXT NOT NULL,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    finding_id TEXT NOT NULL,
+    intent_id TEXT,
+    run_id TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    verdict TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    snapshot TEXT NOT NULL DEFAULT '{}',
+    summary TEXT NOT NULL DEFAULT '',
+    evidence TEXT NOT NULL DEFAULT '',
+    error TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    started_at TEXT,
+    finished_at TEXT,
+    PRIMARY KEY (id, project_id)
+);
+CREATE INDEX IF NOT EXISTS idx_finding_retests_history
+    ON finding_retests (project_id, finding_id, id DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_finding_retests_active
+    ON finding_retests (project_id, finding_id)
+    WHERE status IN ('pending', 'running');
 """
 
 
@@ -246,7 +349,13 @@ def configure(path: Path) -> None:
         _ensure_columns(
             conn,
             "intents",
-            {"priority": "INTEGER NOT NULL DEFAULT 0"},
+            {
+                "priority": "INTEGER NOT NULL DEFAULT 0",
+                # Domain layer: a retest is an intent that re-verifies a finding and
+                # records a verdict. Existing intents default to a normal exploration.
+                "kind": "TEXT NOT NULL DEFAULT 'explore'",
+                "retest_of": "TEXT",
+            },
         )
         _ensure_columns(
             conn,

@@ -351,5 +351,28 @@ per dispatch/skip; `skip dispatch because max_workers reached` is normal.
 | `src/cairn/server/db.py` schema | additive `CREATE TABLE IF NOT EXISTS` / `ALTER TABLE` | existing DBs migrate in place |
 | Deleting projects | yes | cascades facts, intents, chat, activity |
 
-Run `uv run pytest -q` after any engine change. 226 tests cover the dispatcher deadlines,
-claim reconciliation, worker transcript parsing, usage aggregation, sessions API and SSE.
+Run `uv run pytest -q` after any engine change. 243 tests cover the dispatcher deadlines,
+claim reconciliation, worker transcript parsing, usage aggregation, sessions API and SSE,
+plus the domain layer (entities, findings, retests, coverage) and report sections.
+
+---
+
+## 9. Domain layer (entities, findings, retests, coverage)
+
+The generalized Artex domain layer is documented in [`cairn/DOMAIN-LAYER.md`](cairn/DOMAIN-LAYER.md).
+It is **additive**: `init_db` creates the new tables with `CREATE TABLE IF NOT EXISTS` and
+adds `intents.kind` / `intents.retest_of` with guarded `ALTER TABLE`, so an existing database
+migrates in place. Nothing about facts, intents or hints changes.
+
+- **Entity** = typed referent; `kind` is a free string. `POST /projects/{id}/entity` upserts
+  on `(kind, key)`; `in_scope` is sticky.
+- **Finding** = claim backed by a fact (`fact_id`), with free-form `klass` / `severity`.
+- **Retest** = an intent with `kind='retest'` + `retest_of=<finding>`; it runs through the
+  same dispatcher/worker/session path and posts a verdict (`reproduced|fixed|inconclusive`).
+  One active retest per finding; verdicts seal once terminal.
+- **Coverage** is derived, never stored: `tested / (in-scope ∪ anchored)`, where anchored
+  means linked to a fact or a concluded intent.
+
+`GET /projects/{id}` gains `entities`, `findings`, `retests` and `coverage`. The console shows
+**Test assets**, **Asset coverage**, **Retests** and first-class **Findings** only when that
+data exists; a facts-only project keeps the original seven tabs. There are no profiles.

@@ -42,7 +42,7 @@ def create_intent(project_id: str, body: CreateIntentRequest):
         iid = next_intent_id(conn, project_id)
         claimed = body.worker is not None
         conn.execute(
-            "INSERT INTO intents (id, project_id, to_fact_id, description, creator, worker, last_heartbeat_at, created_at, concluded_at, priority) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, NULL, ?)",
+            "INSERT INTO intents (id, project_id, to_fact_id, description, creator, worker, last_heartbeat_at, created_at, concluded_at, priority, kind, retest_of) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, NULL, ?, ?, ?)",
             (
                 iid,
                 project_id,
@@ -52,6 +52,8 @@ def create_intent(project_id: str, body: CreateIntentRequest):
                 now if claimed else None,
                 now,
                 body.priority,
+                body.kind,
+                body.retest_of,
             ),
         )
         for fid in body.from_:
@@ -71,6 +73,8 @@ def create_intent(project_id: str, body: CreateIntentRequest):
             created_at=now,
             concluded_at=None,
             priority=body.priority,
+            kind=body.kind,
+            retest_of=body.retest_of,
         )
 
 
@@ -89,6 +93,10 @@ def heartbeat(project_id: str, intent_id: str, body: HeartbeatRequest):
             (body.worker, now, intent_id, project_id),
         )
         if before["worker"] is None:
+            if before["kind"] == "retest" if "kind" in before.keys() else False:
+                from cairn.server.domain import start_retest_for_intent
+
+                start_retest_for_intent(conn, project_id, intent_id)
             activity_store.record_activity(
                 conn,
                 project_id,
@@ -167,6 +175,19 @@ def conclude(project_id: str, intent_id: str, body: ConcludeRequest):
             "SELECT * FROM intents WHERE id = ? AND project_id = ?",
             (intent_id, project_id),
         ).fetchone()
+
+        if "kind" in updated.keys() and updated["kind"] == "retest":
+            from cairn.server.domain import finish_retest_for_intent
+
+            # The worker may already have POSTed an explicit verdict; this is only the
+            # fallback for a run that concluded without one (inconclusive, not failed).
+            finish_retest_for_intent(
+                conn,
+                project_id,
+                intent_id,
+                status="completed",
+                run_id=None,
+            )
 
         return ConcludeResponse(
             fact=Fact(id=fid, description=body.description),

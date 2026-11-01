@@ -37,6 +37,48 @@ from cairn.server.models import ProjectDetail
 LOG = logging.getLogger(__name__)
 
 
+def _format_scope_context(project) -> str:
+    """Planner-only scope signal: coverage, uncovered entities, open findings, retests."""
+    coverage = getattr(project, "coverage", None)
+    entities = getattr(project, "entities", None) or []
+    findings = getattr(project, "findings", None) or []
+    retests = getattr(project, "retests", None) or []
+    if coverage is None and not entities and not findings:
+        return "(no typed entities or findings recorded yet)"
+    lines: list[str] = []
+    if coverage is not None and coverage.denominator:
+        pct = f"{coverage.pct * 100:.0f}%" if coverage.pct is not None else "—"
+        lines.append(f"Coverage: {coverage.tested}/{coverage.denominator} tested ({pct})")
+        if coverage.by_kind:
+            lines.append(
+                "By kind: "
+                + ", ".join(f"{k.kind} {k.tested}/{k.total}" for k in coverage.by_kind)
+            )
+        if coverage.untested:
+            lines.append("Uncovered in-scope entities (prefer these):")
+            for entity in coverage.untested[:40]:
+                lines.append(
+                    f"- [{entity.get('kind')}] {entity.get('label') or entity.get('key')} "
+                    f"({entity.get('id')})"
+                )
+    else:
+        lines.append(f"Entities: {len(entities)} recorded, coverage not yet computable")
+    final = {"fixed", "false_positive", "ignored", "duplicate", "risk_accepted", "resolved"}
+    open_findings = [f for f in findings if f.status not in final]
+    if open_findings:
+        lines.append("Findings without a final disposition:")
+        for finding in open_findings[:20]:
+            lines.append(
+                f"- {finding.id} [{finding.severity or '?'}] {finding.title} ({finding.status})"
+            )
+    active = [r for r in retests if r.status in ("pending", "running")]
+    if active:
+        lines.append("Retests waiting/running (do not duplicate them):")
+        for retest in active:
+            lines.append(f"- {retest.id} for finding {retest.finding_id} ({retest.status})")
+    return "\n".join(lines) or "(no typed entities or findings recorded yet)"
+
+
 def run_reason_task(
     config: DispatchConfig,
     client: CairnClient,
@@ -121,6 +163,7 @@ def run_reason_task(
                 "fact_ids": format_fact_ids(allowed_fact_ids),
                 "open_intents": format_open_intents(open_intents),
                 "steering": format_steering(steering),
+                "scope": _format_scope_context(project),
                 "max_intents": str(config.tasks.reason.max_intents),
             },
         )

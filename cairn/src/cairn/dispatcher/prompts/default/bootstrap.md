@@ -22,6 +22,23 @@ Only return the following after you have confirmed that Goal has been satisfied:
 - `complete.description` should explain why the currently confirmed results are sufficient to prove that Goal has been achieved.
 - Do not put long data blobs in `description`. Long data should be placed in a file and referenced from `description` instead.
 
+# Write-back tools (Cairn API)
+The project graph lives at {api_base}. If your analysis identifies concrete referents
+(hosts, files, functions, datasets, models, …), register them as you go:
+```
+curl -s -X POST {api_base}/projects/{project_id}/entity \
+  -H 'content-type: application/json' \
+  -d '{"kind":"file","key":"src/parser.py","label":"Parser","in_scope":true,
+       "intent_id":"{intent_id}"}'
+```
+A Finding is a claim backed by a fact:
+```
+curl -s -X POST {api_base}/projects/{project_id}/findings \
+  -H 'content-type: application/json' \
+  -d '{"title":"…","klass":"…","severity":"high","summary":"…","evidence":"…","fact_id":"<fact id>"}'
+```
+Only write what you actually confirmed.
+
 # Context
 ## Origin
 ```
