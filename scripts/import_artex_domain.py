@@ -160,7 +160,10 @@ def parse_finding(text: str) -> dict | None:
     match = FINDING_RE.match(text)
     if match is None:
         return None
-    title = match.group(2).strip().splitlines()[0][:500]
+    raw_title = match.group(2).strip().splitlines()[0]
+    # Artex's first line often carries severity/CWE prose after the readable title.
+    raw_title = re.split(r"\s+\((?:CWE|CVE|CVSS)", raw_title, maxsplit=1)[0]
+    title = raw_title[:180].rsplit(" ", 1)[0] + ("…" if len(raw_title) > 180 else "")
     severity = (SEVERITY_RE.search(text).group(1).strip()[:40] if SEVERITY_RE.search(text) else "")
     klass = (CLASS_RE.search(text).group(1).strip()[:160] if CLASS_RE.search(text) else "")
     summary_match = SUMMARY_RE.search(text)
@@ -242,10 +245,18 @@ def main() -> int:
     for fact in facts:
         text = fact.get("description") or ""
         payload = parse_finding(text)
-        if payload is None or fact["id"] in existing_findings:
+        if payload is None:
             continue
         payload["fact_id"] = fact["id"]
         payload["entities"] = [entity_ids[a.key] for a in fact_assets.get(fact["id"], []) if a.key in entity_ids]
+        existing = existing_findings.get(fact["id"])
+        if existing is not None:
+            if not args.dry_run:
+                api.patch(
+                    f"/projects/{args.project}/findings/{existing['id']}",
+                    {"title": payload["title"], "severity": payload["severity"], "klass": payload["klass"]},
+                )
+            continue
         created_findings += 1
         if not args.dry_run:
             try:
