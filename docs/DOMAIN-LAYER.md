@@ -97,20 +97,23 @@ conclude).
 
 Two tabs were added to the Artex tab set; both are conditional on data:
 
-- **Test assets** — header counts (`entities · tested/in-scope · in scope`), kind filter chips
-  with hashed colours for unknown kinds, search, `In scope only` / `Untested` toggles, table
-  `Label | Kind | Key | Tested | In scope | Source | Facts | Last seen`, a detail drawer with
-  facts/findings and `Open in graph`, and an **Add entity** dialog. Kinds are free strings.
-- **Asset coverage** — percentage header, per-kind stacked bar, `@xyflow/react` containment
-  graph (`parent_id`), tested nodes ringed, untested dashed, out-of-scope muted, minimap,
-  drawer, 300-node cap.
+- **Test assets** — Artex's tabbed table shell: heading + total count, one tab per kind with
+  its icon and count, search, `In scope only` / `Untested` toggles, sticky table header,
+  footer pagination, a detail drawer with facts/findings and `Open in graph`, and an
+  **Add test assets** dialog. Kinds are free strings; tabs are generated from the data.
+- **Asset coverage graph** — Artex's own `@antv/g6` force-directed graph, ported 1:1
+  (`node_modules/@antv/g6`): circular kind-icon nodes, labels under the node, edges from
+  `parent_id`, tested nodes highlighted, untested grey, out-of-scope dashed, folding at 20
+  children per kind with a "..." node, and the light overlay legend/statistics card. Kinds
+  outside Artex's original seven (host/url/file/dataset/model/...) get a generic icon and
+  label while keeping the same visual language.
 
 First-class **Findings** replace the fact-derived list whenever `detail.findings` is non-empty
 (legacy projects keep the derived view). Rows expand to summary, evidence, report, entity
 chips, an inline disposition `Select` (`PATCH …/findings/{id}`), **Open fact in graph** and
 **Retests**.
 
-The **Retests** tab is a two-column Artex-parity page: searchable finding picker with
+The **Retests** tab is Artex's own two-column component (ported): searchable finding picker with
 severity/status badges and a running spinner, finding header with class and linked entities,
 retest history accordion (status/verdict badges, relative time, summary, notes, evidence,
 error, run id), and a **Start a retest** dialog with 4000-character notes. It polls only while
