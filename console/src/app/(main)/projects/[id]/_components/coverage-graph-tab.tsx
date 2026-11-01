@@ -485,7 +485,7 @@ function GraphInner({
         container: containerRef.current,
         autoResize: true,
         autoFit: "center",
-        zoom: 0.55,
+        zoom: 0.9,
         background: "#f0f2f7",
         node: {
           style: {
@@ -593,11 +593,11 @@ function GraphInner({
       <div ref={containerRef} className="h-full w-full" />
 
       {/* The legend, the statistics and the refresh (an overlay) */}
-      <div className="bg-card/95 pointer-events-auto absolute top-3 left-3 flex max-w-[340px] flex-col gap-2.5 rounded-lg border p-3 text-xs shadow-sm backdrop-blur">
+      <div className="pointer-events-auto absolute top-3 left-3 flex max-w-[340px] flex-col gap-2.5 rounded-lg border border-neutral-200 bg-white/95 p-3 text-xs text-neutral-900 shadow-sm backdrop-blur">
         <div className="flex items-center justify-between gap-3">
           {total > 0 ? (
-            <span className="text-muted-foreground">
-              In scope <span className="text-foreground font-semibold tabular-nums">{inScope}</span>
+            <span className="text-neutral-500">
+              In scope <span className="font-semibold text-neutral-900 tabular-nums">{inScope}</span>
               {coverageEnabled && (
                 <>
                   {" "}
@@ -607,7 +607,7 @@ function GraphInner({
               )}
             </span>
           ) : (
-            <span className="text-muted-foreground">{loading ? "Loading..." : "No in-scope asset yet (anchor the task scope first)"}</span>
+            <span className="text-neutral-500">{loading ? "Loading..." : "No in-scope asset yet (anchor the task scope first)"}</span>
           )}
           <Button variant="ghost" size="icon" className="size-6" onClick={onRefresh} title="Refresh">
             <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
@@ -618,7 +618,7 @@ function GraphInner({
             const m = metaFor(k);
             const Icon = m.icon;
             return (
-              <span key={k} className="text-foreground inline-flex items-center gap-1.5">
+              <span key={k} className="inline-flex text-neutral-900 items-center gap-1.5">
                 <span className={cn("flex size-4 items-center justify-center rounded", m.iconBg)}>
                   <Icon className="size-2.5 text-white" />
                 </span>
@@ -627,7 +627,7 @@ function GraphInner({
             );
           })}
         </div>
-        <div className="border-border/60 text-muted-foreground flex flex-wrap gap-x-3 gap-y-1.5 border-t pt-2">
+        <div className="border-neutral-200 text-neutral-500 flex flex-wrap gap-x-3 gap-y-1.5 border-t pt-2">
           {coverageEnabled && (
             <>
               <span className="inline-flex items-center gap-1.5">
@@ -642,7 +642,7 @@ function GraphInner({
             <span className="size-3 rounded-full border border-dashed border-neutral-400 bg-neutral-200" /> Out of scope
           </span>
         </div>
-        <p className="text-muted-foreground/80 border-border/60 border-t pt-2 leading-relaxed">
+        <p className="text-neutral-500/80 border-neutral-200 border-t pt-2 leading-relaxed">
           A force-directed layout: nodes can be dragged and the wheel zooms. A grey "..." is a folded node that expands to show more.
         </p>
       </div>

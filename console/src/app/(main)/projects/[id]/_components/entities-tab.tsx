@@ -41,7 +41,7 @@ import { cairn } from "@/lib/cairn-api";
 import { formatNumber, formatRelative, oneLine } from "@/lib/cairn-format";
 import { cn } from "@/lib/utils";
 
-import { KindBadge, KindDot, kindLabel } from "./entity-kind";
+import { KindBadge, KindDot, KindMark, kindLabel } from "./entity-kind";
 
 const ROW_LIMIT = 200;
 
@@ -579,7 +579,7 @@ export function EntitiesTab({
                     </TabsTrigger>
                     {kindCounts.map(([kind, count]) => (
                       <TabsTrigger key={kind} value={kind}>
-                        <KindDot kind={kind} />
+                        <KindMark kind={kind} />
                         {kindLabel(kind)}
                         <span className="text-muted-foreground tabular-nums">{formatNumber(count)}</span>
                       </TabsTrigger>
