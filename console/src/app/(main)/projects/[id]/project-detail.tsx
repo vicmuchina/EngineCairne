@@ -49,7 +49,7 @@ const TABS = [
   { value: "retests", label: "Retests" },
   // Generalized Artex domain layer; rendered only when the graph has entities.
   { value: "assets", label: "Test assets" },
-  { value: "coverage", label: "Asset coverage" },
+  { value: "coverage", label: "Asset coverage graph" },
   { value: "approvals", label: "Interception approvals" },
   { value: "report", label: "Report" },
 ];
@@ -182,10 +182,10 @@ export default function ProjectDetailPage() {
               : "Loading project…"}
         </p>
         {!unavailable && (
-          <div className="mt-2 min-w-0">
-            <TabsList variant="default" className="flex-wrap justify-start group-data-horizontal/tabs:h-auto">
+          <div className="no-scrollbar mt-2 min-w-0 overflow-x-auto">
+            <TabsList variant="default" className="min-w-max">
               {visibleTabs.map((item) => (
-                <TabsTrigger key={item.value} value={item.value} className="text-[13px] xl:text-sm">
+                <TabsTrigger key={item.value} value={item.value} className="text-[13px]">
                   {item.label}
                 </TabsTrigger>
               ))}
@@ -258,13 +258,7 @@ export default function ProjectDetailPage() {
 
             <TabsContent value="coverage" className="mt-0">
               {id && (
-                <CoverageGraphTab
-                  projectId={id}
-                  detail={detail}
-                  loading={loading}
-                  onOpenGraph={openGraph}
-                  onFocusEntity={focusEntity}
-                />
+                <CoverageGraphTab projectId={id} />
               )}
             </TabsContent>
 

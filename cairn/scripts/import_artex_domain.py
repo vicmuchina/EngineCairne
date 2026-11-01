@@ -114,7 +114,16 @@ def parse_assets(text: str, fact_id: str) -> list[Asset]:
             return
         if not is_host(host) or host in {"asset"}:
             return
-        assets.setdefault(("host", host), Asset("host", host, host, None, scoped, fact_id))
+        parent_key: str | None = None
+        if scoped and host.count(".") >= 2:
+            base = ".".join(host.split(".")[-2:])
+            if base != host:
+                assets.setdefault(
+                    ("root_domain", base),
+                    Asset("root_domain", base, base, None, True, fact_id),
+                )
+                parent_key = base
+        assets.setdefault(("host", host), Asset("host", host, host, parent_key, scoped, fact_id))
 
     def add_url(raw: str) -> None:
         if any(char in raw for char in BAD_URL_CHARS):
@@ -230,7 +239,7 @@ def main() -> int:
                     entity = {"id": f"dry:{key}"}
                     existing_entities[key] = entity
             entity_ids[key] = entity["id"]
-            if not args.dry_run and asset.kind == "url" and asset.parent_key:
+            if not args.dry_run and asset.parent_key:
                 parent = existing_entities.get(asset.parent_key)
                 if parent and entity.get("parent_id") != parent["id"]:
                     api.patch(

@@ -4,6 +4,8 @@ import * as React from "react";
 
 import {
   CheckIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   ExternalLinkIcon,
   FilterIcon,
   NetworkIcon,
@@ -33,6 +35,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Entity, Finding, ProjectDetail } from "@/lib/cairn-api";
 import { cairn } from "@/lib/cairn-api";
 import { formatNumber, formatRelative, oneLine } from "@/lib/cairn-format";
@@ -482,6 +485,7 @@ export function EntitiesTab({
   const coverage = detail?.coverage ?? null;
 
   const [kindFilter, setKindFilter] = React.useState("all");
+  const [page, setPage] = React.useState(0);
   const [query, setQuery] = React.useState("");
   const [inScopeOnly, setInScopeOnly] = React.useState(false);
   const [untestedOnly, setUntestedOnly] = React.useState(false);
@@ -511,6 +515,10 @@ export function EntitiesTab({
     return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   }, [entities]);
 
+  React.useEffect(() => {
+    setPage(0);
+  }, [kindFilter, query, inScopeOnly, untestedOnly]);
+
   const matched = React.useMemo(() => {
     const needle = query.trim().toLowerCase();
     return [...entities]
@@ -529,7 +537,10 @@ export function EntitiesTab({
       .sort((a, b) => a.kind.localeCompare(b.kind) || a.key.localeCompare(b.key));
   }, [entities, inScopeOnly, kindFilter, query, untestedOnly]);
 
-  const visible = matched.slice(0, ROW_LIMIT);
+  const PAGE_SIZE = 50;
+  const pageCount = Math.max(1, Math.ceil(matched.length / PAGE_SIZE));
+  const activePage = Math.min(page, pageCount - 1);
+  const visible = matched.slice(activePage * PAGE_SIZE, (activePage + 1) * PAGE_SIZE);
   const selected = selectedId ? (entities.find((entity) => entity.id === selectedId) ?? null) : null;
 
   const tested = coverage?.tested ?? entities.filter((entity) => entity.tested).length;
@@ -539,64 +550,46 @@ export function EntitiesTab({
 
   return (
     <div className="flex flex-col gap-4">
-      <Card className="gap-0 overflow-hidden p-0">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <TagsIcon className="size-4 shrink-0 text-muted-foreground" />
-            <span className="text-sm font-semibold">Test assets</span>
-            <span className="text-[11px] text-muted-foreground">
-              {formatNumber(entities.length)} entities · {formatNumber(tested)}/{formatNumber(denominator)} tested ·{" "}
-              {formatNumber(scopeRows)} in scope
-            </span>
-          </div>
-          <Button size="sm" onClick={() => setAddOpen(true)}>
-            <PlusIcon data-icon="inline-start" />
-            Add entity
-          </Button>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="font-medium text-sm">Test assets</h2>
+          <p className="text-muted-foreground text-xs">
+            The current task is linked to {formatNumber(entities.length)} assets in total
+          </p>
         </div>
+        <Button size="sm" onClick={() => setAddOpen(true)}>
+          <PlusIcon data-icon="inline-start" />
+          Add test assets
+        </Button>
+      </div>
 
+      <Card className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden py-0">
         {entities.length === 0 ? (
-          <div className="px-4 py-12 text-center text-xs text-muted-foreground">
+          <div className="text-muted-foreground px-4 py-12 text-center text-xs">
             No entities recorded yet — agents register them through the write-back API.
           </div>
         ) : (
           <>
-            <div className="flex flex-col gap-2.5 border-b px-4 py-3">
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Kinds</span>
-                <button
-                  type="button"
-                  aria-pressed={kindFilter === "all"}
-                  onClick={() => setKindFilter("all")}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] transition-colors",
-                    kindFilter === "all" ? "border-foreground/20 bg-muted" : "bg-card hover:bg-muted/60",
-                  )}
-                >
-                  All
-                  <span className="tabular-nums text-muted-foreground">{entities.length}</span>
-                </button>
-                {kindCounts.map(([kind, count]) => (
-                  <button
-                    key={kind}
-                    type="button"
-                    aria-pressed={kindFilter === kind}
-                    onClick={() => setKindFilter(kind === kindFilter ? "all" : kind)}
-                    className={cn(
-                      "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] transition-colors",
-                      kindFilter === kind ? "bg-muted" : "bg-card hover:bg-muted/60",
-                    )}
-                  >
-                    <KindDot kind={kind} />
-                    {kindLabel(kind)}
-                    <span className="tabular-nums text-muted-foreground">{count}</span>
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
+            <div className="border-b px-4 py-3">
+              <Tabs value={kindFilter} onValueChange={setKindFilter} className="gap-2">
+                <div className="overflow-x-auto overflow-y-hidden">
+                  <TabsList className="h-auto w-max flex-wrap justify-start group-data-horizontal/tabs:h-auto">
+                    <TabsTrigger value="all">
+                      All <span className="text-muted-foreground tabular-nums">{formatNumber(entities.length)}</span>
+                    </TabsTrigger>
+                    {kindCounts.map(([kind, count]) => (
+                      <TabsTrigger key={kind} value={kind}>
+                        <KindDot kind={kind} />
+                        {kindLabel(kind)}
+                        <span className="text-muted-foreground tabular-nums">{formatNumber(count)}</span>
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </div>
+              </Tabs>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
                 <div className="relative min-w-48 flex-1 sm:max-w-xs">
-                  <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2" />
                   <Input
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
@@ -623,10 +616,6 @@ export function EntitiesTab({
                 >
                   Untested
                 </Button>
-                <span className="ml-auto text-[11px] text-muted-foreground">
-                  {formatNumber(visible.length)} of {formatNumber(matched.length)} shown
-                  {matched.length > ROW_LIMIT ? ` · limit ${formatNumber(ROW_LIMIT)}` : ""}
-                </span>
               </div>
             </div>
 
@@ -716,10 +705,36 @@ export function EntitiesTab({
               </div>
             )}
 
-            <div className="border-t px-4 py-2 text-[11px] text-muted-foreground">
-              {matched.length > ROW_LIMIT
-                ? `Showing the first ${formatNumber(ROW_LIMIT)} of ${formatNumber(matched.length)} matching entities — narrow the search or kind filter to inspect the rest.`
-                : `${formatNumber(matched.length)} entities shown${filtersActive ? " (filtered)" : ""}.`}
+            <div className="text-muted-foreground flex items-center gap-2 border-t px-3 py-1.5 text-xs">
+              <span className="tabular-nums">
+                {matched.length === 0 ? 0 : activePage * PAGE_SIZE + 1}–{Math.min(matched.length, (activePage + 1) * PAGE_SIZE)} /{" "}
+                {formatNumber(matched.length)}
+              </span>
+              {pageCount > 1 ? (
+                <div className="ml-auto flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="icon-sm"
+                    disabled={activePage <= 0}
+                    onClick={() => setPage(Math.max(0, activePage - 1))}
+                    aria-label="Previous page"
+                  >
+                    <ChevronLeftIcon />
+                  </Button>
+                  <span className="tabular-nums">
+                    {activePage + 1} / {pageCount}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="icon-sm"
+                    disabled={activePage + 1 >= pageCount}
+                    onClick={() => setPage(Math.min(pageCount - 1, activePage + 1))}
+                    aria-label="Next page"
+                  >
+                    <ChevronRightIcon />
+                  </Button>
+                </div>
+              ) : null}
             </div>
           </>
         )}
