@@ -286,8 +286,8 @@ export function RetestsTab({
                 {findingStatusBadge(selected.status)}
                 <span className="font-mono text-[11px] text-muted-foreground">#{selected.id}</span>
                 {selected.klass && (
-                  <Badge variant="outline" className="font-normal">
-                    {selected.klass}
+                  <Badge variant="outline" className="max-w-full font-normal">
+                    <span className="min-w-0 truncate">{selected.klass}</span>
                   </Badge>
                 )}
                 <Button

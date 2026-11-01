@@ -165,7 +165,9 @@ def parse_finding(text: str) -> dict | None:
     raw_title = re.split(r"\s+\((?:CWE|CVE|CVSS)", raw_title, maxsplit=1)[0]
     title = raw_title[:180].rsplit(" ", 1)[0] + ("…" if len(raw_title) > 180 else "")
     severity = (SEVERITY_RE.search(text).group(1).strip()[:40] if SEVERITY_RE.search(text) else "")
-    klass = (CLASS_RE.search(text).group(1).strip()[:160] if CLASS_RE.search(text) else "")
+    klass_raw = CLASS_RE.search(text).group(1).strip() if CLASS_RE.search(text) else ""
+    klass_raw = re.split(r"\s+\((?:CWE|CVE|CVSS)", klass_raw, maxsplit=1)[0]
+    klass = klass_raw[:100].rsplit(" ", 1)[0] + ("…" if len(klass_raw) > 100 else "")
     summary_match = SUMMARY_RE.search(text)
     summary = summary_match.group(1).strip()[:4000] if summary_match else ""
     return {

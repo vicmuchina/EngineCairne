@@ -208,8 +208,8 @@ export function FirstClassFindings({
                     <span className="text-[13px] font-semibold leading-snug">{finding.title}</span>
                     <span className="font-mono text-[10px] text-muted-foreground">#{finding.id}</span>
                     {finding.klass && (
-                      <Badge variant="secondary" className="font-normal">
-                        {finding.klass}
+                      <Badge variant="secondary" className="max-w-full font-normal">
+                        <span className="min-w-0 truncate">{finding.klass}</span>
                       </Badge>
                     )}
                   </div>
